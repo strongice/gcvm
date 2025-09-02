@@ -1,0 +1,5 @@
+table th, table td {
+  outline: none !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}

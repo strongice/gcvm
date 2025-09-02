@@ -2,7 +2,8 @@ services:
   web:
     build: .
     image: gitlab-file-vars-webui:latest
+    container_name: gitlab-ui
     env_file:
       - .env
     ports:
-      - "8017:8017"
+      - "80:8017"
