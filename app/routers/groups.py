@@ -30,18 +30,6 @@ async def list_groups(request: Request, search: Optional[str] = Query(default=No
     return await gl.list_groups(search)
 
 
-@router.get("/top")
-async def list_top_groups(request: Request, search: Optional[str] = Query(default=None)) -> List[Dict[str, Any]]:
-    gl = request.app.state.gitlab
-    return await gl.list_top_groups(search)
-
-
-@router.get("/{group_id}/subgroups")
-async def list_subgroups(request: Request, group_id: int, search: Optional[str] = Query(default=None)) -> List[Dict[str, Any]]:
-    gl = request.app.state.gitlab
-    return await gl.list_subgroups(group_id, search)
-
-
 @router.get("/{group_id}/variables")
 async def group_variables(request: Request, group_id: int) -> List[Dict[str, Any]]:
     gl = request.app.state.gitlab

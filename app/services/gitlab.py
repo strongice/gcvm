@@ -111,33 +111,7 @@ class GitLabClient:
             for g in items
         ]
 
-    async def list_top_groups(self, search: Optional[str] = None) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {
-            "membership": True,
-            "top_level_only": True,
-            "order_by": "path",
-            "sort": "asc",
-        }
-        if search:
-            params["search"] = search
-        items = await self._paginated_get("/groups", params)
-        return [
-            {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
-            for g in items
-        ]
-
-    async def list_subgroups(self, group_id: int, search: Optional[str] = None) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {
-            "order_by": "path",
-            "sort": "asc",
-        }
-        if search:
-            params["search"] = search
-        items = await self._paginated_get(f"/groups/{group_id}/subgroups", params)
-        return [
-            {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
-            for g in items
-        ]
+    # list_top_groups / list_subgroups — удалены (откат варианта A)
 
     # ---------- projects (все доступные токену) ----------
     async def list_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:

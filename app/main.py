@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pathlib
 from contextlib import asynccontextmanager
+import logging
 
 import httpx
 from fastapi import FastAPI
@@ -30,6 +31,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="GitLab File Variables WebUI", version="0.4.0", lifespan=lifespan)
 
 # CORS не используется: фронтенд и бэкенд обслуживаются с одного origin
+
+# Логирование
+root_level = getattr(logging, (settings.LOG_LEVEL or "INFO").upper(), logging.INFO)
+logging.basicConfig(
+    level=root_level,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+gitlab_level = getattr(logging, (settings.GITLAB_LOG_LEVEL or "WARNING").upper(), logging.WARNING)
+logging.getLogger("app.services.gitlab").setLevel(gitlab_level)
 
 # Routers
 from app.routers import groups as groups_router  # noqa: E402

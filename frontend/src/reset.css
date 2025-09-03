@@ -6,6 +6,32 @@ body {
   color: #0f172a;
 }
 
+/* Стили ссылок/фокуса в духе GitLab */
+a { color: #1f75cb; }
+a:hover { color: #0e5cab; }
+/* Фокус-рамка для текстовых полей/селектов; чекбоксы/радио исключаем, чтобы не было синего квадрата */
+input:where(:not([type="checkbox"]):not([type="radio"])):focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(31,117,203,0.15);
+  border-color: #93c5fd;
+}
+
+/* Убираем синий прямоугольник у checkbox/radio на фокус */
+input[type="checkbox"]:focus,
+input[type="radio"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Унифицированные мелкие отступы/радиусы для форм */
+.gl-input { padding: 0.375rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; background: #fff; }
+.gl-input:disabled { background: #f1f5f9; color: #94a3b8; }
+.gl-btn { padding: 0.375rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; background: #fff; }
+.gl-btn:hover { background: #f8fafc; }
+.gl-badge { border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 999px; padding: 0.125rem 0.5rem; font-size: 12px; }
+
 /* Табличные ячейки без артефактов */
 table th, table td {
   outline: none !important;

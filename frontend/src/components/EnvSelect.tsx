@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 function useOutsideClose(refs: React.RefObject<HTMLElement>[], onClose: () => void) {
   useEffect(() => {
@@ -65,19 +66,21 @@ export function EnvSelect({
     .filter((n) => (q ? n.toLowerCase().includes(q.toLowerCase()) : true))
     .slice(0, 50);
 
+  const display = value === '*' ? 'Все (по умолчанию)' : value;
+
   return (
     <>
       <div ref={anchorRef} className="relative">
         <input
           readOnly
-          value={value}
+          value={display}
           onClick={() => setOpen(true)}
-          className="w-[220px] pl-3 pr-9 h-10 leading-10 rounded-xl border border-slate-300 bg-white cursor-pointer"
-          placeholder="*"
+          className="w-[220px] gl-input h-9 leading-9 pr-9 cursor-pointer"
+          placeholder="Все (по умолчанию)"
           title="Нажмите чтобы выбрать окружение или начните ввод в выпадающем поиске"
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden>
-          ▾
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden>
+          <ChevronDown size={16} strokeWidth={2.5} />
         </span>
       </div>
 
@@ -117,7 +120,7 @@ export function EnvSelect({
                     }}
                     className={cls("w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50", n === value && "bg-slate-100")}
                   >
-                    {n}
+                    {n === '*' ? 'Все (по умолчанию)' : n}
                   </button>
                 ))
               )}

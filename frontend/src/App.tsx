@@ -47,7 +47,7 @@ export default function App() {
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
 
-      setGroups(await api.groupsTop());
+      setGroups(await api.groups());
     })();
   }, []);
 
@@ -88,7 +88,6 @@ export default function App() {
     const c = { kind: "group" as const, id: g.id, name: g.full_path };
     setCtx(c);
     setProjects(await api.projects(g.id, projectSearch));
-    setGroups(await api.subgroups(g.id, groupSearch));
     await loadVars(c, true);
   }
 
@@ -304,26 +303,23 @@ export default function App() {
         {/* Sidebar Desktop */}
         <div className="hidden lg:block">
           <Sidebar
-          groups={groups}
-          groupSearch={groupSearch}
-          onGroupSearchChange={async (q) => {
-            setGroupSearch(q);
-            // Если выбран контекст группы — ищем по её подгруппам, иначе по top-level
-            if (ctx?.kind === 'group') setGroups(await api.subgroups(ctx.id, q));
-            else setGroups(await api.groupsTop(q));
-          }}
-          onPickGroup={pickGroup}
-          projects={projects}
-          projectSearch={projectSearch}
-          onProjectSearchChange={async (q) => {
-            setProjectSearch(q);
-            const gid = ctx?.kind === "group" ? ctx.id : ctx?.parent?.id || null;
-            setProjects(await api.projects(gid as any, q));
-          }}
-          onPickProject={pickProject}
-          selectedProjectId={selectedProjectId}
-          currentGroupName={ctx?.kind === "group" ? ctx.name : undefined}
-          onGoRoot={async () => { setCtx(null); setGroups(await api.groupsTop(groupSearch)); setProjects([]); }}
+            groups={groups}
+            groupSearch={groupSearch}
+            onGroupSearchChange={async (q) => {
+              setGroupSearch(q);
+              setGroups(await api.groups(q));
+            }}
+            onPickGroup={pickGroup}
+            projects={projects}
+            projectSearch={projectSearch}
+            onProjectSearchChange={async (q) => {
+              setProjectSearch(q);
+              const gid = ctx?.kind === "group" ? ctx.id : ctx?.parent?.id || null;
+              setProjects(await api.projects(gid as any, q));
+            }}
+            onPickProject={pickProject}
+            selectedProjectId={selectedProjectId}
+            currentGroupName={ctx?.kind === "group" ? ctx.name : ctx?.parent?.name}
           />
         </div>
 
@@ -336,10 +332,9 @@ export default function App() {
                 groups={groups}
                 groupSearch={groupSearch}
                 onGroupSearchChange={async (q) => {
-            setGroupSearch(q);
-            if (ctx?.kind === 'group') setGroups(await api.subgroups(ctx.id, q));
-            else setGroups(await api.groupsTop(q));
-          }}
+                  setGroupSearch(q);
+                  setGroups(await api.groups(q));
+                }}
                 onPickGroup={(g) => { setSidebarOpen(false); pickGroup(g); }}
                 projects={projects}
                 projectSearch={projectSearch}

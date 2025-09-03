@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # при работе через base_url (см. services/gitlab.py)
     GITLAB_REWRITE_REDIRECTS: bool = True
 
+    # Логирование
+    LOG_LEVEL: str = "INFO"  # DEBUG/INFO/WARNING/ERROR
+    GITLAB_LOG_LEVEL: str = "WARNING"  # уровень логов HTTP-вызовов к GitLab
+
     @property
     def ui_auto_refresh_sec(self) -> int:
         # Нормализуем до минимума 1 секунда

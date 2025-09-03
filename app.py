@@ -19,7 +19,8 @@ def main() -> None:
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8017"))
     reload_enabled = os.getenv("RELOAD", "true").lower() in ("1", "true", "yes", "on")
-    log_level = os.getenv("LOG_LEVEL", "info")
+    # uvicorn ожидает нижний регистр: debug/info/warning/error/critical/trace
+    log_level = (os.getenv("LOG_LEVEL", "info") or "info").lower()
     workers = int(os.getenv("WORKERS", "1") or "1")
 
     # При reload uvicorn работает только с import string и всего с 1 воркером

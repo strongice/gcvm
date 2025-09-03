@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class UpsertVarPayload(BaseModel):
     key: str
     value: str
+    variable_type: Optional[str] = None  # 'env_var' | 'file'
     environment_scope: Optional[str] = "*"
     protected: bool = False
     masked: bool = False
@@ -79,4 +80,25 @@ async def project_envs(request: Request, project_id: int) -> Dict[str, List[str]
 @router.post("/{project_id}/variables/upsert")
 async def project_variable_upsert(request: Request, project_id: int, payload: UpsertVarPayload) -> Dict[str, Any]:
     gl = request.app.state.gitlab
-    return await gl.project_file_var_upsert(project_id, payload.model_dump())
+    data = payload.model_dump()
+    # Безопасный лог (без value)
+    safe = {
+        "key": data.get("key"),
+        "value_len": (len(data.get("value") or "")),
+        "variable_type": data.get("variable_type"),
+        "environment_scope": data.get("environment_scope"),
+        "protected": data.get("protected"),
+        "masked": data.get("masked"),
+        "masked_and_hidden": data.get("masked_and_hidden"),
+        "raw": data.get("raw"),
+        "original_key": data.get("original_key"),
+        "original_environment_scope": data.get("original_environment_scope"),
+    }
+    logger.info("upsert project variable: project_id=%s %s", project_id, safe)
+    try:
+        res = await gl.project_file_var_upsert(project_id, data)
+        logger.info("upsert project variable: done status=%s", res.get("status"))
+        return res
+    except Exception as e:
+        logger.exception("upsert project variable: failed project_id=%s %s", project_id, safe)
+        raise

@@ -1,6 +1,6 @@
 import React from "react";
 import type { VarSummary } from "../types";
-import { Eye, EyeOff, Shield, Expand } from "lucide-react";
+import { EyeOff, Shield, ShieldOff, Pencil, Check } from "lucide-react";
 
 export function VariablesTable(props: {
   vars: VarSummary[];
@@ -14,8 +14,8 @@ export function VariablesTable(props: {
 
   return (
     <section className="flex-1 p-3">
-      <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
           <div className="text-base font-semibold">{titleText}</div>
         </div>
 
@@ -28,7 +28,7 @@ export function VariablesTable(props: {
                 <th>ОКРУЖЕНИЕ</th>
                 <th>ЗАЩИЩЁННАЯ</th>
                 <th>МАСКИРОВАННАЯ</th>
-                <th>EXPAND</th>
+                <th>РАЗВЕРНУТЬ</th>
                 <th>ДЕЙСТВИЯ</th>
               </tr>
             </thead>
@@ -55,41 +55,53 @@ export function VariablesTable(props: {
                 vars.map((v) => {
                   const expand = !(v.raw === true);
                   return (
-                    <tr key={`${v.key}|${v.environment_scope}`} className="[&>td]:py-2 [&>td]:px-3 [&>td]:border-b [&>td]:border-slate-100">
+                    <tr key={`${v.key}|${v.environment_scope}`} className="hover:bg-slate-50 transition-colors [&>td]:py-2 [&>td]:px-3 [&>td]:border-b [&>td]:border-slate-100">
                       <td className="font-mono text-[12px]">{v.key}</td>
                       <td>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs border border-slate-200 bg-slate-50">
-                          {v.variable_type || 'env_var'}
+                        <span className="inline-flex items-center gl-badge">
+                          {v.variable_type === 'env_var' ? 'variables' : (v.variable_type || 'variables')}
                         </span>
                       </td>
-                      <td>{v.environment_scope || "*"}</td>
+                      <td>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-700 text-xs">
+                          {v.environment_scope || "*"}
+                        </span>
+                      </td>
                       <td>
                         {v.protected ? (
-                          <Shield size={16} className="text-emerald-600" aria-label="Protected" />
+                          <span className="inline-flex items-center gap-1 text-emerald-600">
+                            <Shield size={16} /> Да
+                          </span>
                         ) : (
-                          <span className="text-slate-300">–</span>
+                          <span className="inline-flex items-center gap-1 text-slate-400">
+                            <ShieldOff size={16} /> Нет
+                          </span>
                         )}
                       </td>
                       <td>
                         {v.masked ? (
-                          <EyeOff size={16} className="text-amber-600" aria-label="Masked" />
+                          <span className="inline-flex items-center gap-1 text-amber-600">
+                            <EyeOff size={16} /> Да
+                          </span>
                         ) : (
-                          <Eye size={16} className="text-slate-500" aria-label="Visible" />
+                          <span className="inline-flex items-center gap-1 text-slate-400">
+                            <EyeOff size={16} className="opacity-40" /> Нет
+                          </span>
                         )}
                       </td>
                       <td>
                         {expand ? (
-                          <Expand size={16} className="text-sky-700" aria-label="Expand enabled" />
+                          <Check size={16} className="text-slate-700" />
                         ) : (
-                          <span className="text-slate-300">–</span>
+                          <span className="text-slate-400">—</span>
                         )}
                       </td>
                       <td>
                         <button
-                          className="px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-white"
                           onClick={() => onEdit(v)}
                         >
-                          Редактировать
+                          <Pencil size={16} /> Редактировать
                         </button>
                       </td>
                     </tr>

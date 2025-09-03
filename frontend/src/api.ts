@@ -28,14 +28,6 @@ export const api = {
     const r = await fetch("/api/groups" + (search ? `?search=${encodeURIComponent(search)}` : ""));
     return check<Group[]>(r);
   },
-  async groupsTop(search = "") {
-    const r = await fetch("/api/groups/top" + (search ? `?search=${encodeURIComponent(search)}` : ""));
-    return check<Group[]>(r);
-  },
-  async subgroups(group_id: number, search = "") {
-    const r = await fetch(`/api/groups/${group_id}/subgroups` + (search ? `?search=${encodeURIComponent(search)}` : ""));
-    return check<Group[]>(r);
-  },
   async projects(group_id: number | null, search = "") {
     const qs = new URLSearchParams();
     if (group_id) qs.set("group_id", String(group_id));
