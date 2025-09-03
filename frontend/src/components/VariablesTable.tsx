@@ -100,6 +100,7 @@ export function VariablesTable(props: {
                         <button
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 hover:bg-white"
                           onClick={() => onEdit(v)}
+                          title="Открыть редактор переменной"
                         >
                           <Pencil size={16} /> Редактировать
                         </button>

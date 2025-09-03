@@ -65,6 +65,7 @@ export function TypeSelect({
                   key={n}
                   onClick={() => { onChange(n); setOpen(false); }}
                   className={("w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 ") + (n === value ? "bg-slate-100" : "")}
+                  title={n === 'file' ? 'Тип: Файл' : 'Тип: Переменная (по умолчанию)'}
                 >
                   {n === "file" ? "Файл" : "Переменная (по умолчанию)"}
                 </button>

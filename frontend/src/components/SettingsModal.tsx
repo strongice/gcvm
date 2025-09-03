@@ -42,8 +42,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               <div className="text-xs text-slate-500 mt-1">Текущее значение: <b>{currentValue}</b> сек.</div>
             </div>
             <div className="flex gap-2 mt-4">
-              <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg" disabled={value === '' || Number(value) < 1}>Сохранить</button>
-              <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Отмена</button>
+              <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg" disabled={value === '' || Number(value) < 1} title="Сохранить настройки">Сохранить</button>
+              <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg" title="Закрыть без сохранения">Отмена</button>
             </div>
           </form>
         </div>

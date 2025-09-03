@@ -119,6 +119,7 @@ export function EnvSelect({
                       setOpen(false);
                     }}
                     className={cls("w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50", n === value && "bg-slate-100")}
+                    title={n === '*' ? 'Все (по умолчанию)' : n}
                   >
                     {n === '*' ? 'Все (по умолчанию)' : n}
                   </button>

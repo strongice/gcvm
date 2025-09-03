@@ -68,6 +68,7 @@ export function VariableModal(props: {
             onClick={onClose}
             disabled={saving}
             aria-label="Закрыть"
+            title="Закрыть"
           >
             <X size={16} />
           </button>
@@ -236,6 +237,7 @@ export function VariableModal(props: {
                 className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
                 onClick={onClose}
                 disabled={saving}
+                title="Отменить изменения и закрыть"
               >
                 Отмена
               </button>
@@ -251,6 +253,7 @@ export function VariableModal(props: {
                   }
                 }}
                 disabled={saving || (!maskedValidation.ok && (draft.masked || draft.hidden))}
+                title={(!maskedValidation.ok && (draft.masked || draft.hidden)) ? "Нельзя сохранить: не выполнены требования к маскированному значению" : "Сохранить переменную"}
               >
                 Сохранить
               </button>

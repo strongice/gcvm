@@ -288,7 +288,7 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
         <div className="max-w-[1400px] mx-auto px-4 py-2.5 flex items-center gap-3">
-          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
+          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
             <Menu size={18} />
           </button>
           <div className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</div>
@@ -320,6 +320,7 @@ export default function App() {
             <button
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm"
               onClick={() => setSettingsOpen(true)}
+              title="Открыть настройки автообновления"
             >
               <Gear size={16} /> Настройки
             </button>
