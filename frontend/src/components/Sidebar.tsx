@@ -37,7 +37,7 @@ export function Sidebar(props: {
   const [openGroupId, setOpenGroupId] = useState<number | null>(null);
 
   return (
-    <aside className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-auto">
+    <aside className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden">
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         {/* Группы + Аккордеон */}
         <div className="p-3 border-b border-slate-200">

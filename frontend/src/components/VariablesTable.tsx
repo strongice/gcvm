@@ -24,11 +24,11 @@ export function VariablesTable(props: {
             <thead className="bg-slate-50">
               <tr className="[&>th]:py-2 [&>th]:px-3 [&>th]:text-left [&>th]:text-slate-600 [&>th]:border-b [&>th]:border-slate-200">
                 <th>КЛЮЧ</th>
-                <th>ТИП</th>
+                <th className="hidden md:table-cell">ТИП</th>
                 <th>ОКРУЖЕНИЕ</th>
-                <th>ЗАЩИЩЁННАЯ</th>
-                <th>МАСКИРОВАННАЯ</th>
-                <th>РАЗВЕРНУТЬ</th>
+                <th className="hidden md:table-cell">ЗАЩИЩЁННАЯ</th>
+                <th className="hidden md:table-cell">МАСКИРОВАННАЯ</th>
+                <th className="hidden md:table-cell">РАЗВЕРНУТЬ</th>
                 <th>ДЕЙСТВИЯ</th>
               </tr>
             </thead>
@@ -57,7 +57,7 @@ export function VariablesTable(props: {
                   return (
                     <tr key={`${v.key}|${v.environment_scope}`} className="hover:bg-slate-50 transition-colors [&>td]:py-2 [&>td]:px-3 [&>td]:border-b [&>td]:border-slate-100">
                       <td className="font-mono text-[12px]">{v.key}</td>
-                      <td>
+                      <td className="hidden md:table-cell">
                         <span className="inline-flex items-center gl-badge">
                           {v.variable_type === 'env_var' ? 'variables' : (v.variable_type || 'variables')}
                         </span>
@@ -67,7 +67,7 @@ export function VariablesTable(props: {
                           {v.environment_scope || "*"}
                         </span>
                       </td>
-                      <td>
+                      <td className="hidden md:table-cell">
                         {v.protected ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600">
                             <Shield size={16} /> Да
@@ -78,7 +78,7 @@ export function VariablesTable(props: {
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td className="hidden md:table-cell">
                         {v.masked ? (
                           <span className="inline-flex items-center gap-1 text-amber-600">
                             <EyeOff size={16} /> Да
@@ -89,7 +89,7 @@ export function VariablesTable(props: {
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td className="hidden md:table-cell">
                         {expand ? (
                           <Check size={16} className="text-slate-700" />
                         ) : (
@@ -102,7 +102,8 @@ export function VariablesTable(props: {
                           onClick={() => onEdit(v)}
                           title="Открыть редактор переменной"
                         >
-                          <Pencil size={16} /> Редактировать
+                          <Pencil size={16} />
+                          <span className="hidden sm:inline">Редактировать</span>
                         </button>
                       </td>
                     </tr>

@@ -14,6 +14,7 @@ function cls(...parts: (string | false | undefined)[]) {
 
 export default function App() {
   const [tokenInfo, setTokenInfo] = useState<string>("…");
+  const [tokenOk, setTokenOk] = useState<boolean>(false);
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -45,6 +46,7 @@ export default function App() {
       const h = await api.health();
       const name = h?.user?.name || h?.user?.username || "OK";
       setTokenInfo(name);
+      setTokenOk(!!h?.ok);
 
       const cfg = await api.uiConfig();
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
@@ -293,9 +295,39 @@ export default function App() {
           </button>
           <div className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</div>
           <div className="ml-auto flex items-center gap-2">
-            <span className="px-2 py-0.5 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
-              Token OK: {tokenInfo}
+            <span
+              className={cls(
+                "inline-flex items-center px-3 py-1.5 rounded-lg border text-sm",
+                tokenOk
+                  ? "border-emerald-300/70 bg-emerald-50 text-emerald-700"
+                  : "border-rose-300/70 bg-rose-50 text-rose-700"
+              )}
+              title={tokenOk ? "Подключено к GitLab" : "Нет подключения к GitLab"}
+            >
+              GitLab
             </span>
+            {/* Мобильная кнопка Создать (иконка) */}
+            <button
+              className={cls(
+                "inline-flex sm:hidden items-center gap-1 px-3 py-1.5 rounded-lg text-sm border",
+                ctx && canCreate && !varsLoading ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
+              )}
+              onClick={openCreate}
+              disabled={!ctx || !canCreate || varsLoading}
+              title={
+                !ctx
+                  ? "Выберите группу или проект"
+                  : varsLoading
+                  ? "Загрузка данных…"
+                  : !canCreate
+                  ? (ctx?.kind === 'group'
+                      ? "Нет прав на редактирование переменных этой группы"
+                      : "Нет прав на редактирование переменных этого проекта")
+                  : "Создать переменную"
+              }
+            >
+              <Plus size={16} />
+            </button>
             <button
               className={cls(
                 "hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border",
@@ -312,7 +344,7 @@ export default function App() {
                   ? (ctx?.kind === 'group'
                       ? "Нет прав на редактирование переменных этой группы"
                       : "Нет прав на редактирование переменных этого проекта")
-                  : undefined
+                  : "Создать переменную"
               }
             >
               <Plus size={16} /> Создать
@@ -364,7 +396,7 @@ export default function App() {
         {sidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[360px] bg-white border-r border-slate-200 p-2 overflow-auto">
+            <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[360px] bg-white border-r border-slate-200 p-2 overflow-y-auto overflow-x-hidden">
               <Sidebar
                 groups={groups}
                 groupSearch={groupSearch}
@@ -372,7 +404,7 @@ export default function App() {
                   setGroupSearch(q);
                   setGroups(await api.groups(q));
                 }}
-                onPickGroup={(g) => { setSidebarOpen(false); pickGroup(g); }}
+                onPickGroup={(g) => { /* на мобилке оставляем меню открытым, чтобы увидеть список проектов */ pickGroup(g); }}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 projectSearch={projectSearch}
