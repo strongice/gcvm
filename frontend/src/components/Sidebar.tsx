@@ -35,7 +35,7 @@ export function Sidebar(props: {
   const [openGroupId, setOpenGroupId] = useState<number | null>(null);
 
   return (
-    <aside className="w-[420px] shrink-0 p-3">
+    <aside className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-auto">
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         {/* Группы + Аккордеон */}
         <div className="p-3 border-b border-slate-200">
@@ -49,7 +49,7 @@ export function Sidebar(props: {
             />
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-          <div className="max-h-[62vh] overflow-auto space-y-2">
+          <div className="space-y-2">
             {[...groups].sort((a,b)=> (a.full_path||a.name).localeCompare(b.full_path||b.name)).map((g) => {
               const opened = openGroupId === g.id;
               return (
@@ -74,7 +74,7 @@ export function Sidebar(props: {
                         />
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       </div>
-                      <div className="max-h-[72vh] overflow-auto p-1">
+                      <div className="p-1">
                         {projects.map((p) => {
                           const selected = selectedProjectId === p.id;
                           return (
