@@ -118,15 +118,33 @@ class GitLabClient:
                 params["search"] = search
             items = await self._paginated_get("/projects", params)
 
-        return [
-            {
-                "id": p["id"],
-                "name": p.get("name") or p.get("path"),
-                "path_with_namespace": p.get("path_with_namespace"),
-                "namespace": (p.get("namespace", {}) or {}).get("full_path"),
-            }
-            for p in items
-        ]
+        out: List[Dict[str, Any]] = []
+        for p in items:
+            ns = (p.get("namespace", {}) or {})
+            out.append(
+                {
+                    "id": p["id"],
+                    "name": p.get("name") or p.get("path"),
+                    "path_with_namespace": p.get("path_with_namespace"),
+                    "namespace_id": ns.get("id"),
+                    "namespace_full_path": ns.get("full_path"),
+                }
+            )
+        return out
+
+    async def get_project(self, project_id: int) -> Dict[str, Any]:
+        """Возвращает минимальные данные проекта, используемые UI при восстановлении контекста."""
+        r = await self._request("GET", f"/projects/{project_id}")
+        self._raise_for_status(r)
+        p = r.json()
+        ns = (p.get("namespace", {}) or {})
+        return {
+            "id": p.get("id"),
+            "name": p.get("name") or p.get("path"),
+            "path_with_namespace": p.get("path_with_namespace"),
+            "namespace_id": ns.get("id"),
+            "namespace_full_path": ns.get("full_path"),
+        }
 
     # ---------- environments ----------
     async def list_project_environments(self, project_id: int) -> List[str]:
@@ -138,7 +156,7 @@ class GitLabClient:
         names = [it.get("name") for it in items if isinstance(it, dict) and it.get("name")]
         return sorted({n for n in names}, key=lambda s: s.lower())
 
-    # ---------- project variables (file) ----------
+    # ---------- project variables (all types) ----------
     async def project_file_vars(self, project_id: int) -> List[Dict[str, Any]]:
         items = await self._paginated_get(f"/projects/{project_id}/variables")
         out = [
@@ -152,7 +170,7 @@ class GitLabClient:
                 "hidden": v.get("hidden", False),  # GitLab 17.4+
             }
             for v in items
-            if v.get("variable_type") == "file"
+            if isinstance(v, dict)
         ]
         out.sort(key=lambda x: (x["key"], x.get("environment_scope") or "*"))
         return out
@@ -166,12 +184,9 @@ class GitLabClient:
             timeout=settings.REQUEST_TIMEOUT_S,
         )
         self._raise_for_status(r)
-        v = r.json()
-        if v.get("variable_type") != "file":
-            raise HTTPException(404, "Variable exists but is not of type 'file'")
-        return v
+        return r.json()
 
-    # ---------- group variables (file) ----------
+    # ---------- group variables (all types) ----------
     async def group_file_vars(self, group_id: int) -> List[Dict[str, Any]]:
         items = await self._paginated_get(f"/groups/{group_id}/variables")
         out = [
@@ -185,7 +200,7 @@ class GitLabClient:
                 "hidden": v.get("hidden", False),  # GitLab 17.4+
             }
             for v in items
-            if v.get("variable_type") == "file"
+            if isinstance(v, dict)
         ]
         out.sort(key=lambda x: (x["key"], x.get("environment_scope") or "*"))
         return out
@@ -199,10 +214,7 @@ class GitLabClient:
             timeout=settings.REQUEST_TIMEOUT_S,
         )
         self._raise_for_status(r)
-        v = r.json()
-        if v.get("variable_type") != "file":
-            raise HTTPException(404, "Variable exists but is not of type 'file'")
-        return v
+        return r.json()
 
     # ---------- deletes ----------
     async def _project_var_delete(self, project_id: int, key: str, env: str = "*") -> None:
@@ -225,10 +237,11 @@ class GitLabClient:
         # GitLab 17.4: создание hidden — через masked_and_hidden=true
         mah = bool(payload.get("masked_and_hidden", False))
         masked = bool(payload.get("masked", False) or mah)
+        variable_type = payload.get("variable_type") or "file"
 
         body_common = {
             "value": payload["value"],
-            "variable_type": "file",
+            "variable_type": variable_type,
             "protected": bool(payload.get("protected", False)),
             "masked": masked,  # на PUT используем masked; для скрытой создадим заново
             "raw": bool(payload.get("raw", False)),
@@ -320,10 +333,11 @@ class GitLabClient:
 
         mah = bool(payload.get("masked_and_hidden", False))
         masked = bool(payload.get("masked", False) or mah)
+        variable_type = payload.get("variable_type") or "file"
 
         body_common = {
             "value": payload["value"],
-            "variable_type": "file",
+            "variable_type": variable_type,
             "protected": bool(payload.get("protected", False)),
             "masked": masked,
             "raw": bool(payload.get("raw", False)),

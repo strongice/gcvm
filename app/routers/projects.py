@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import logging
 
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+logger = logging.getLogger(__name__)
 
 
 class UpsertVarPayload(BaseModel):
@@ -31,6 +33,23 @@ async def list_projects(
 ) -> List[Dict[str, Any]]:
     gl = request.app.state.gitlab
     return await gl.list_projects(group_id=group_id, search=search)
+
+
+@router.get("/{project_id}")
+async def project_get(request: Request, project_id: int) -> Dict[str, Any]:
+    """Эндпоинт для восстановления контекста проекта на фронтенде.
+
+    Логируем обращение и отдадим минимальный набор полей, которых достаточно UI.
+    """
+    gl = request.app.state.gitlab
+    logger.info("project_get: requested project_id=%s", project_id)
+    try:
+        data = await gl.get_project(project_id)
+        logger.debug("project_get: resolved project_id=%s -> %s", project_id, data)
+        return data
+    except Exception as e:
+        logger.warning("project_get: failed for project_id=%s: %s", project_id, e)
+        raise
 
 
 @router.get("/{project_id}/variables")

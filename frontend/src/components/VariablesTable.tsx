@@ -23,6 +23,7 @@ export function VariablesTable(props: {
             <thead className="bg-slate-50">
               <tr className="[&>th]:py-2 [&>th]:px-3 [&>th]:text-left [&>th]:text-slate-600 [&>th]:border-b [&>th]:border-slate-200">
                 <th>КЛЮЧ</th>
+                <th>ТИП</th>
                 <th>ОКРУЖЕНИЕ</th>
                 <th>ЗАЩИЩЁННАЯ</th>
                 <th>МАСКИРОВАННАЯ</th>
@@ -33,20 +34,20 @@ export function VariablesTable(props: {
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="py-8 text-center text-slate-500" colSpan={6}>
+                  <td className="py-8 text-center text-slate-500" colSpan={7}>
                     Загрузка…
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td className="py-8 text-center text-amber-600" colSpan={6}>
+                  <td className="py-8 text-center text-amber-600" colSpan={7}>
                     {error}
                   </td>
                 </tr>
               ) : vars.length === 0 ? (
                 <tr>
-                  <td className="py-8 text-center text-slate-500" colSpan={6}>
-                    {hasContext ? "Нет file-переменных" : "Выберите группу или проект слева"}
+                  <td className="py-8 text-center text-slate-500" colSpan={7}>
+                    {hasContext ? "Нет переменных" : "Выберите группу или проект слева"}
                   </td>
                 </tr>
               ) : (
@@ -55,6 +56,7 @@ export function VariablesTable(props: {
                   return (
                     <tr key={`${v.key}|${v.environment_scope}`} className="[&>td]:py-2 [&>td]:px-3 [&>td]:border-b [&>td]:border-slate-100">
                       <td className="font-mono text-[12px]">{v.key}</td>
+                      <td>{v.variable_type || 'env_var'}</td>
                       <td>{v.environment_scope || "*"}</td>
                       <td>{v.protected ? "✓" : ""}</td>
                       <td>{v.masked ? "✓" : ""}</td>

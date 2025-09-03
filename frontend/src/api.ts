@@ -63,5 +63,9 @@ export const api = {
     });
     return check<any>(r);
   },
+  async projectGet(project_id: number) {
+    const r = await fetch(`/api/projects/${project_id}`);
+    return check<Project>(r);
+  },
 };
 

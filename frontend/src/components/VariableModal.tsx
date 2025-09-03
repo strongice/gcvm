@@ -67,6 +67,33 @@ export function VariableModal(props: {
                 </div>
               </div>
 
+              {/* Variable Type */}
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600">Type:</span>
+
+                  <label className="inline-flex items-center gap-1" title="Обычная переменная окружения">
+                    <input
+                      type="radio"
+                      name="vartype"
+                      checked={(draft.variable_type || 'env_var') !== 'file'}
+                      onChange={() => setDraft({ ...draft, variable_type: 'env_var' })}
+                    />
+                    env_var
+                  </label>
+
+                  <label className="inline-flex items-center gap-1" title="Хранится как файл (content)">
+                    <input
+                      type="radio"
+                      name="vartype"
+                      checked={draft.variable_type === 'file'}
+                      onChange={() => setDraft({ ...draft, variable_type: 'file' })}
+                    />
+                    file
+                  </label>
+                </div>
+              </div>
+
               {/* Visibility */}
               <div className="flex flex-wrap items-center gap-6">
                 <div className="flex items-center gap-2">
@@ -191,4 +218,3 @@ export function VariableModal(props: {
     </div>
   );
 }
-

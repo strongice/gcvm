@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Group, Project } from "../types";
 
 function cls(...parts: (string | false | undefined)[]) {
@@ -75,7 +75,7 @@ export function Sidebar(props: {
             return (
               <button
                 key={p.id}
-                title={p.path_with_namespace || p.name}
+                title={p.path_with_namespace || p.namespace_full_path || p.name}
                 onClick={() => onPickProject(p)}
                 className={cls("w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50", selected && "bg-slate-100 border border-slate-200")}
               >

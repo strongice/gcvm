@@ -4,6 +4,7 @@ import type { Group, Project, VarEditing, VarSummary } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { VariablesTable } from "./components/VariablesTable";
 import { VariableModal } from "./components/VariableModal";
+import SettingsModal from "./components/SettingsModal";
 
 /* утилита классов */
 function cls(...parts: (string | false | undefined)[]) {
@@ -30,7 +31,7 @@ export default function App() {
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
   const [envOptions, setEnvOptions] = useState<string[]>([]);
 
-  const selectedProjectId = ctx?.kind === "project" ? ctx.id : null;
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // init
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function App() {
       const status: number = e?.status ?? 0;
       if (status === 403) {
         setVars([]);
-        setVarsError("Нет доступа к переменным для выбранного контекста.");
+        setVarsError("Нет доступа к переменным для выбранной группы.");
       } else if (status === 404) {
         setVars([]);
         setVarsError("Контекст не найден. Выберите группу/проект заново.");
@@ -101,7 +102,7 @@ export default function App() {
   // модалка
   async function openCreate() {
     if (!ctx) return;
-    const empty: VarEditing = { key: "", environment_scope: "*", protected: false, masked: false, raw: false, value: "" };
+    const empty: VarEditing = { key: "", variable_type: 'file', environment_scope: "*", protected: false, masked: false, raw: false, value: "" };
     setModalInitial(empty);
     setModalOpen(true);
     if (ctx.kind === "project") setEnvOptions(await api.projectEnvs(ctx.id));
@@ -126,6 +127,7 @@ export default function App() {
     if (!ctx) return;
     const payload: any = {
       key: draft.key.trim(),
+      variable_type: draft.variable_type || 'file',
       environment_scope: draft.environment_scope?.trim() || "*",
       protected: !!draft.protected,
       // masked управляется видимостью:
@@ -149,6 +151,107 @@ export default function App() {
     await loadVars(ctx);
   }
 
+  const handleSettingsSave = (refreshSec: number) => {
+    setAutoRefreshSec(refreshSec);
+    // TODO: отправить на сервер, если нужно
+  };
+
+  const selectedProjectId = ctx?.kind === "project" ? ctx.id : null;
+
+  // --- Сохранение состояния в localStorage ---
+  useEffect(() => {
+    // Сохраняем выбранный контекст
+    if (ctx) {
+      localStorage.setItem("ui_ctx", JSON.stringify(ctx));
+    }
+    // Сохраняем открытый редактор переменной
+    if (modalOpen && modalInitial) {
+      localStorage.setItem("ui_var_edit", JSON.stringify(modalInitial));
+    } else {
+      localStorage.removeItem("ui_var_edit");
+    }
+  }, [ctx, modalOpen, modalInitial]);
+
+  useEffect(() => {
+    // Восстанавливаем выбранный контекст и редактор переменной только если не было очистки (например, при смене гитлаба)
+    const savedCtx = localStorage.getItem("ui_ctx");
+    const savedVar = localStorage.getItem("ui_var_edit");
+    if (savedCtx) {
+      try {
+        const parsed = JSON.parse(savedCtx);
+        // Если проект без parent — получаем его через API
+        if (parsed.kind === "project" && !parsed.parent?.id) {
+          api.projectGet(parsed.id).then(proj => {
+            // Если есть id namespace (group) — ищем её среди загруженных групп
+            const groupId = proj.namespace_id || undefined;
+            if (groupId) {
+              api.groups().then(allGroups => {
+                const parentGroup = allGroups.find(g => g.id === groupId);
+                if (parentGroup) {
+                  const newCtx = { ...parsed, parent: { id: parentGroup.id, name: parentGroup.full_path } };
+                  setCtx(newCtx);
+                  api.projects(parentGroup.id, projectSearch).then(setProjects);
+                  loadVars(newCtx, true);
+                  return;
+                }
+              });
+            }
+            // Если не удалось найти группу — отображаем только проект
+            setCtx(parsed);
+            setProjects([{ id: parsed.id, name: parsed.name, path_with_namespace: parsed.name }]);
+            loadVars(parsed, true);
+          });
+        } else if (parsed.kind === "group") {
+          setCtx(parsed);
+          api.projects(parsed.id, projectSearch).then(setProjects);
+          loadVars(parsed, true);
+        } else if (parsed.kind === "project") {
+          // Если parent есть — стандартная логика
+          setCtx(parsed);
+          api.projects(parsed.parent.id, projectSearch).then(setProjects);
+          loadVars(parsed, true);
+        }
+      } catch {}
+    }
+    if (savedVar) {
+      try {
+        const parsed = JSON.parse(savedVar);
+        setModalInitial(parsed);
+        setModalOpen(true);
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    // Очищаем localStorage только если меняется base_url гитлаба
+    const prevBaseUrl = localStorage.getItem("ui_gitlab_url");
+    const baseUrl = window.location.origin;
+    if (prevBaseUrl && prevBaseUrl !== baseUrl) {
+      localStorage.removeItem("ui_ctx");
+      localStorage.removeItem("ui_var_edit");
+    }
+    localStorage.setItem("ui_gitlab_url", baseUrl);
+  }, []);
+
+  useEffect(() => {
+    // Если редактор открыт после восстановления, подгружаем envOptions и актуальные данные переменной
+    if (modalOpen && modalInitial && ctx) {
+      if (ctx.kind === "project") {
+        api.projectEnvs(ctx.id).then(setEnvOptions);
+      } else {
+        setEnvOptions([]);
+      }
+      // Если есть ключ и окружение — обновим данные переменной
+      if (modalInitial.key) {
+        api.varGet(ctx, modalInitial.key, modalInitial.environment_scope || "*")
+          .then(full => {
+            setModalInitial({ ...full, __originalKey: full.key, __originalEnv: full.environment_scope || "*" });
+          })
+          .catch(() => {});
+      }
+    }
+  }, [modalOpen, modalInitial, ctx]);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
       {/* Header */}
@@ -158,12 +261,12 @@ export default function App() {
           <span className="ml-auto px-2 py-1 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
             Token OK: {tokenInfo}
           </span>
-          <button
+          {/* <button
             className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
             onClick={() => ctx && loadVars(ctx)}
           >
             Обновить
-          </button>
+          </button> */}
           <button
             className={cls(
               "px-3 py-1.5 rounded-xl border text-sm",
@@ -173,6 +276,12 @@ export default function App() {
             disabled={!ctx}
           >
             Создать
+          </button>
+          <button
+            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
+            onClick={() => setSettingsOpen(true)}
+          >
+            Настройки
           </button>
         </div>
       </header>
@@ -215,7 +324,13 @@ export default function App() {
         envOptions={envOptions}
         onSave={saveEditing}
       />
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSettingsSave}
+        currentValue={autoRefreshSec}
+      />
     </div>
   );
 }
-

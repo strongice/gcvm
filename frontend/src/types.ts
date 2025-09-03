@@ -1,8 +1,15 @@
 export type Group = { id: number; full_path: string };
-export type Project = { id: number; name: string; path_with_namespace?: string; namespace?: string };
+export type Project = {
+  id: number;
+  name: string;
+  path_with_namespace?: string;
+  namespace_id?: number;
+  namespace_full_path?: string;
+};
 
 export type VarSummary = {
   key: string;
+  variable_type?: 'env_var' | 'file' | string;
   environment_scope: string;
   protected: boolean;
   masked: boolean;
@@ -16,6 +23,4 @@ export type VarEditing = VarDetail & { __originalKey?: string; __originalEnv?: s
 export type Health = { ok: boolean; user?: { id: number; username?: string; name?: string }; base_url?: string };
 export type UIConfig = { auto_refresh_enabled: boolean; auto_refresh_sec: number };
 export type ApiError = { status: number; message?: string };
-
-
 

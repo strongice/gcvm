@@ -5,8 +5,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
@@ -30,14 +29,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="GitLab File Variables WebUI", version="0.4.0", lifespan=lifespan)
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=(settings.cors_allow_origins_list if settings.cors_allow_origins_list != ["*"] else ["*"]),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS не используется: фронтенд и бэкенд обслуживаются с одного origin
 
 # Routers
 from app.routers import groups as groups_router  # noqa: E402
@@ -62,7 +54,7 @@ async def api_health():
 async def ui_config():
     return {
         "auto_refresh_enabled": settings.UI_AUTO_REFRESH_ENABLED,
-        "auto_refresh_sec": settings.UI_AUTO_REFRESH_SEC,
+        "auto_refresh_sec": settings.ui_auto_refresh_sec,
     }
 
 
@@ -79,10 +71,3 @@ if FRONTEND_DIST.exists():
     @app.get("/", include_in_schema=False)
     async def root_redirect():
         return RedirectResponse(url="/ui/")
-else:
-    UI_DIR = BASE_DIR / "ui"
-
-    @app.get("/", include_in_schema=False)
-    async def index() -> HTMLResponse:
-        html = (UI_DIR / "index.html").read_text(encoding="utf-8")
-        return HTMLResponse(html)
