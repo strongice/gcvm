@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
+import logging
 
 from app.core.config import settings
 
@@ -13,6 +14,9 @@ HEADERS = {
     "PRIVATE-TOKEN": settings.GITLAB_TOKEN,
     "Content-Type": "application/json",
 }
+
+
+logger = logging.getLogger(__name__)
 
 
 class GitLabClient:
@@ -32,6 +36,8 @@ class GitLabClient:
             raise HTTPException(status_code=r.status_code, detail=detail)
 
     async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("HTTP %s %s", method, url)
         r = await self.http.request(method, url, headers=HEADERS, **kwargs)
         # Нормализуем redirect на абсолютный external_url (типа http://localhost)
         if 300 <= r.status_code < 400:
@@ -44,11 +50,23 @@ class GitLabClient:
                 rel = parsed.path or "/"
                 if parsed.query:
                     rel = f"{rel}?{parsed.query}"
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("HTTP redirect -> %s", rel)
                 r = await self.http.request(method, rel, headers=HEADERS, **kwargs)
                 return r
             if not parsed.netloc:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("HTTP redirect -> %s", loc)
                 r = await self.http.request(method, loc, headers=HEADERS, **kwargs)
                 return r
+        if r.status_code >= 400:
+            try:
+                body = r.text
+            except Exception:
+                body = "<no body>"
+            logger.warning("HTTP %s %s -> %s; body: %s", method, url, r.status_code, body[:1000])
+        else:
+            logger.debug("HTTP %s %s -> %s", method, url, r.status_code)
         return r
 
     async def _paginated_get(self, url: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
@@ -88,6 +106,34 @@ class GitLabClient:
         if search:
             params["search"] = search
         items = await self._paginated_get("/groups", params)
+        return [
+            {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
+            for g in items
+        ]
+
+    async def list_top_groups(self, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {
+            "membership": True,
+            "top_level_only": True,
+            "order_by": "path",
+            "sort": "asc",
+        }
+        if search:
+            params["search"] = search
+        items = await self._paginated_get("/groups", params)
+        return [
+            {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
+            for g in items
+        ]
+
+    async def list_subgroups(self, group_id: int, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {
+            "order_by": "path",
+            "sort": "asc",
+        }
+        if search:
+            params["search"] = search
+        items = await self._paginated_get(f"/groups/{group_id}/subgroups", params)
         return [
             {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
             for g in items
@@ -247,6 +293,12 @@ class GitLabClient:
             "raw": bool(payload.get("raw", False)),
             "environment_scope": new_env,
         }
+        if masked:
+            try:
+                vlen = len(payload.get("value") or "")
+                logger.info("upsert project masked value: key=%s type=%s len=%s", new_key, variable_type, vlen)
+            except Exception:
+                pass
         params_new = {"filter[environment_scope]": new_env}
 
         original_key = payload.get("original_key") or new_key
@@ -343,6 +395,12 @@ class GitLabClient:
             "raw": bool(payload.get("raw", False)),
             "environment_scope": new_env,
         }
+        if masked:
+            try:
+                vlen = len(payload.get("value") or "")
+                logger.info("upsert group masked value: key=%s type=%s len=%s", new_key, variable_type, vlen)
+            except Exception:
+                pass
         params_new = {"filter[environment_scope]": new_env}
 
         original_key = payload.get("original_key") or new_key

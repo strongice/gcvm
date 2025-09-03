@@ -3,10 +3,13 @@ import type { ApiError, Group, Health, Project, UIConfig, VarDetail, VarSummary 
 async function check<T>(r: Response): Promise<T> {
   if (!r.ok) {
     let message = "";
+    let parsed: any = undefined;
     try {
-      message = await r.text();
+      const txt = await r.text();
+      message = txt;
+      try { parsed = JSON.parse(txt); } catch {}
     } catch {}
-    const err: ApiError = { status: r.status, message };
+    const err: ApiError = { status: r.status, message, json: parsed };
     throw err;
   }
   return r.json() as Promise<T>;
@@ -23,6 +26,14 @@ export const api = {
   },
   async groups(search = "") {
     const r = await fetch("/api/groups" + (search ? `?search=${encodeURIComponent(search)}` : ""));
+    return check<Group[]>(r);
+  },
+  async groupsTop(search = "") {
+    const r = await fetch("/api/groups/top" + (search ? `?search=${encodeURIComponent(search)}` : ""));
+    return check<Group[]>(r);
+  },
+  async subgroups(group_id: number, search = "") {
+    const r = await fetch(`/api/groups/${group_id}/subgroups` + (search ? `?search=${encodeURIComponent(search)}` : ""));
     return check<Group[]>(r);
   },
   async projects(group_id: number | null, search = "") {
@@ -68,4 +79,3 @@ export const api = {
     return check<Project>(r);
   },
 };
-

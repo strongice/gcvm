@@ -31,6 +31,7 @@ export default function App() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [envOptions, setEnvOptions] = useState<string[]>([]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -46,7 +47,7 @@ export default function App() {
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
 
-      setGroups(await api.groups());
+      setGroups(await api.groupsTop());
     })();
   }, []);
 
@@ -87,6 +88,7 @@ export default function App() {
     const c = { kind: "group" as const, id: g.id, name: g.full_path };
     setCtx(c);
     setProjects(await api.projects(g.id, projectSearch));
+    setGroups(await api.subgroups(g.id, groupSearch));
     await loadVars(c, true);
   }
 
@@ -107,6 +109,7 @@ export default function App() {
     const empty: VarEditing = { key: "", variable_type: 'file', environment_scope: "*", protected: false, masked: false, raw: false, value: "" };
     setModalInitial(empty);
     setModalOpen(true);
+    setModalError(null);
     if (ctx.kind === "project") setEnvOptions(await api.projectEnvs(ctx.id));
     else setEnvOptions([]);
   }
@@ -115,9 +118,11 @@ export default function App() {
     if (!ctx) return;
     try {
       const full = await api.varGet(ctx, v.key, v.environment_scope || "*");
-      const edit: VarEditing = { ...full, __originalKey: full.key, __originalEnv: full.environment_scope || "*" };
+      const vt = (full.variable_type === 'env_var') ? 'variables' : full.variable_type;
+      const edit: VarEditing = { ...full, variable_type: vt as any, __originalKey: full.key, __originalEnv: full.environment_scope || "*" };
       setModalInitial(edit);
       setModalOpen(true);
+      setModalError(null);
       if (ctx.kind === "project") setEnvOptions(await api.projectEnvs(ctx.id));
       else setEnvOptions([]);
     } catch {
@@ -127,9 +132,10 @@ export default function App() {
 
   async function saveEditing(draft: VarEditing) {
     if (!ctx) return;
+    const backendType = (draft.variable_type === 'variables') ? 'env_var' : (draft.variable_type || 'file');
     const payload: any = {
       key: draft.key.trim(),
-      variable_type: draft.variable_type || 'file',
+      variable_type: backendType,
       environment_scope: draft.environment_scope?.trim() || "*",
       protected: !!draft.protected,
       // masked управляется видимостью:
@@ -149,8 +155,25 @@ export default function App() {
       payload.original_environment_scope = draft.__originalEnv || "*";
     }
 
-    await api.upsert(ctx, payload);
-    await loadVars(ctx);
+    try {
+      setModalError(null);
+      await api.upsert(ctx, payload);
+      await loadVars(ctx);
+      setModalOpen(false);
+    } catch (e: any) {
+      // Дружественное сообщение для masked-значений
+      let friendly = e?.message || "Не удалось сохранить переменную";
+      if (e?.status === 400) {
+        const d = e?.json?.detail || e?.json;
+        const valErr = d?.message?.value;
+        if (Array.isArray(valErr) && valErr[0] && (modalInitial?.masked || modalInitial?.hidden)) {
+          friendly = "Значение для маскированной переменной не соответствует требованиям GitLab. " +
+            "Используйте не менее 8 символов и допустимые символы (буквы/цифры и ограничённый набор спецсимволов).";
+        }
+      }
+      setModalError(friendly);
+      throw e;
+    }
   }
 
   const handleSettingsSave = (refreshSec: number) => {
@@ -236,40 +259,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Если редактор открыт после восстановления, подгружаем envOptions и актуальные данные переменной
-    if (modalOpen && modalInitial && ctx) {
-      if (ctx.kind === "project") {
-        api.projectEnvs(ctx.id).then(setEnvOptions);
-      } else {
-        setEnvOptions([]);
-      }
-      // Если есть ключ и окружение — обновим данные переменной
-      if (modalInitial.key) {
-        api.varGet(ctx, modalInitial.key, modalInitial.environment_scope || "*")
-          .then(full => {
-            setModalInitial({ ...full, __originalKey: full.key, __originalEnv: full.environment_scope || "*" });
-          })
-          .catch(() => {});
-      }
+    // Если редактор открыт — подгружаем только список окружений. 
+    // Не перезатираем modalInitial повторными запросами, чтобы не сбивать ввод пользователя.
+    if (modalOpen && ctx) {
+      if (ctx.kind === "project") api.projectEnvs(ctx.id).then(setEnvOptions);
+      else setEnvOptions([]);
     }
-  }, [modalOpen, modalInitial, ctx]);
+  }, [modalOpen, ctx]);
 
   return (
     <div className="min-h-screen text-slate-900">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-3">
-          <button className="lg:hidden p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
+        <div className="max-w-[1400px] mx-auto px-4 py-2.5 flex items-center gap-3">
+          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
             <Menu size={18} />
           </button>
           <div className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</div>
           <div className="ml-auto flex items-center gap-2">
-            <span className="px-2 py-1 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
+            <span className="px-2 py-0.5 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
               Token OK: {tokenInfo}
             </span>
             <button
               className={cls(
-                "hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-sm border",
+                "hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border",
                 ctx ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
               )}
               onClick={openCreate}
@@ -278,7 +291,7 @@ export default function App() {
               <Plus size={16} /> Создать
             </button>
             <button
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm"
               onClick={() => setSettingsOpen(true)}
             >
               <Gear size={16} /> Настройки
@@ -295,7 +308,9 @@ export default function App() {
           groupSearch={groupSearch}
           onGroupSearchChange={async (q) => {
             setGroupSearch(q);
-            setGroups(await api.groups(q));
+            // Если выбран контекст группы — ищем по её подгруппам, иначе по top-level
+            if (ctx?.kind === 'group') setGroups(await api.subgroups(ctx.id, q));
+            else setGroups(await api.groupsTop(q));
           }}
           onPickGroup={pickGroup}
           projects={projects}
@@ -307,7 +322,8 @@ export default function App() {
           }}
           onPickProject={pickProject}
           selectedProjectId={selectedProjectId}
-          currentGroupName={ctx?.kind === "group" ? ctx.name : ctx?.parent?.name}
+          currentGroupName={ctx?.kind === "group" ? ctx.name : undefined}
+          onGoRoot={async () => { setCtx(null); setGroups(await api.groupsTop(groupSearch)); setProjects([]); }}
           />
         </div>
 
@@ -320,9 +336,10 @@ export default function App() {
                 groups={groups}
                 groupSearch={groupSearch}
                 onGroupSearchChange={async (q) => {
-                  setGroupSearch(q);
-                  setGroups(await api.groups(q));
-                }}
+            setGroupSearch(q);
+            if (ctx?.kind === 'group') setGroups(await api.subgroups(ctx.id, q));
+            else setGroups(await api.groupsTop(q));
+          }}
                 onPickGroup={(g) => { setSidebarOpen(false); pickGroup(g); }}
                 projects={projects}
                 projectSearch={projectSearch}
@@ -355,6 +372,7 @@ export default function App() {
         initial={modalInitial}
         envOptions={envOptions}
         onSave={saveEditing}
+        error={modalError || undefined}
       />
 
       <SettingsModal
