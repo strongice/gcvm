@@ -215,7 +215,8 @@ export function VariableModal(props: {
                   ref={textRef}
                   value={draft.value ?? ""}
                   onChange={(e) => setDraft({ ...draft, value: e.target.value })}
-                  className="flex-1 min-h-[200px] w-full max-w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-300/60 overflow-hidden resize-y"
+                  className="flex-1 min-h-[200px] w-full max-w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-300/60 overflow-auto resize-y"
+                  style={{ WebkitOverflowScrolling: 'touch' as any }}
                   placeholder=".env / file content"
                 />
                 { (draft.masked || draft.hidden) && maskedValidation.errors.length > 0 && (
