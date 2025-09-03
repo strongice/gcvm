@@ -3,6 +3,7 @@ import { api } from "./api";
 import type { Group, Project, VarEditing, VarSummary } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { VariablesTable } from "./components/VariablesTable";
+import Welcome from "./components/Welcome";
 import { VariableModal } from "./components/VariableModal";
 import SettingsModal from "./components/SettingsModal";
 import { Menu, Plus, Settings as Gear } from "lucide-react";
@@ -13,6 +14,15 @@ function cls(...parts: (string | false | undefined)[]) {
 }
 
 export default function App() {
+  // Инициализируем контекст сразу из localStorage, чтобы избежать мигания стартовой страницы
+  const initialCtx = (() => {
+    try {
+      const raw = localStorage.getItem("ui_ctx");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
   const [tokenInfo, setTokenInfo] = useState<string>("…");
   const [tokenOk, setTokenOk] = useState<boolean>(false);
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
@@ -26,7 +36,7 @@ export default function App() {
   const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
   const projectsReqRef = useRef(0);
 
-  const [ctx, setCtx] = useState<{ kind: "group" | "project"; id: number; name: string; parent?: { id: number; name: string } } | null>(null);
+  const [ctx, setCtx] = useState<{ kind: "group" | "project"; id: number; name: string; parent?: { id: number; name: string } } | null>(initialCtx);
 
   const [vars, setVars] = useState<VarSummary[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
@@ -39,6 +49,8 @@ export default function App() {
   const [envOptions, setEnvOptions] = useState<string[]>([]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [landingProjects, setLandingProjects] = useState<Project[]>([]);
+  const [landingCounts, setLandingCounts] = useState<{groups: number; projects: number}>({groups: 0, projects: 0});
 
   // init
   useEffect(() => {
@@ -52,7 +64,14 @@ export default function App() {
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
 
-      setGroups(await api.groups());
+      const g = await api.groups();
+      setGroups(g);
+      // загрузим базовый список проектов пользователя для стартовой страницы
+      try {
+        const all = await api.projects(null as any, "");
+        setLandingCounts({ groups: g.length, projects: all.length });
+        setLandingProjects(all.slice(0, 6));
+      } catch {}
     })();
   }, []);
 
@@ -216,16 +235,41 @@ export default function App() {
   }, [ctx, modalOpen, modalInitial]);
 
   useEffect(() => {
-    // Восстанавливаем выбранный контекст и редактор переменной только если не было очистки (например, при смене гитлаба)
+    // Если контекст уже инициализирован из localStorage — не перезаписываем его, просто проверяем дополнения
+    if (ctx) {
+      // Если это проект без parent — попробуем подтянуть родителя один раз
+      if (ctx.kind === "project" && !ctx.parent?.id) {
+        api.projectGet(ctx.id).then(proj => {
+          const groupId = proj.namespace_id || undefined;
+          if (groupId) {
+            api.groups().then(allGroups => {
+              const parentGroup = allGroups.find(g => g.id === groupId);
+              if (parentGroup) {
+                const newCtx = { ...ctx, parent: { id: parentGroup.id, name: parentGroup.full_path } } as any;
+                setCtx(newCtx);
+                api.projects(parentGroup.id, projectSearch).then(setProjects);
+                loadVars(newCtx, true);
+              }
+            });
+          } else {
+            loadVars(ctx, true);
+          }
+        }).catch(()=>{});
+      } else {
+        // Контекст есть — просто убедимся, что проекты загружены
+        const gid = ctx.kind === 'group' ? ctx.id : ctx.parent?.id;
+        if (gid) api.projects(gid, projectSearch).then(setProjects);
+        loadVars(ctx, true);
+      }
+      return;
+    }
+    // Если контекста нет — пробуем восстановить как раньше
     const savedCtx = localStorage.getItem("ui_ctx");
-    const savedVar = localStorage.getItem("ui_var_edit");
     if (savedCtx) {
       try {
         const parsed = JSON.parse(savedCtx);
-        // Если проект без parent — получаем его через API
         if (parsed.kind === "project" && !parsed.parent?.id) {
           api.projectGet(parsed.id).then(proj => {
-            // Если есть id namespace (group) — ищем её среди загруженных групп
             const groupId = proj.namespace_id || undefined;
             if (groupId) {
               api.groups().then(allGroups => {
@@ -239,7 +283,6 @@ export default function App() {
                 }
               });
             }
-            // Если не удалось найти группу — отображаем только проект
             setCtx(parsed);
             setProjects([{ id: parsed.id, name: parsed.name, path_with_namespace: parsed.name }]);
             loadVars(parsed, true);
@@ -249,13 +292,18 @@ export default function App() {
           api.projects(parsed.id, projectSearch).then(setProjects);
           loadVars(parsed, true);
         } else if (parsed.kind === "project") {
-          // Если parent есть — стандартная логика
           setCtx(parsed);
           api.projects(parsed.parent.id, projectSearch).then(setProjects);
           loadVars(parsed, true);
         }
       } catch {}
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Отдельно восстановим черновик переменной, если был сохранён
+  useEffect(() => {
+    const savedVar = localStorage.getItem("ui_var_edit");
     if (savedVar) {
       try {
         const parsed = JSON.parse(savedVar);
@@ -293,7 +341,24 @@ export default function App() {
           <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
             <Menu size={18} />
           </button>
-          <div className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</div>
+          <button className="text-[15px] font-semibold tracking-wide" title="На главную"
+            onClick={async () => {
+              setCtx(null);
+              setVars([]);
+              setVarsError(null);
+              setProjects([]);
+              // обновим группы и блок приветствия
+              const g = await api.groups(groupSearch);
+              setGroups(g);
+              try {
+                const all = await api.projects(null as any, "");
+                setLandingCounts({ groups: g.length, projects: all.length });
+                setLandingProjects(all.slice(0, 6));
+              } catch {}
+            }}
+          >
+            GitLab: CI/CD Variables
+          </button>
           <div className="ml-auto flex items-center gap-2">
             <span
               className={cls(
@@ -428,14 +493,23 @@ export default function App() {
           </div>
         )}
 
-        <VariablesTable
-          vars={vars}
-          loading={varsLoading}
-          error={varsError}
-          onEdit={openEdit}
-          hasContext={!!ctx}
-          titleText={ctx ? (ctx.kind === "project" ? "Проект: " : "Группа: ") + ctx.name : "Выберите контекст"}
-        />
+        {ctx ? (
+          <VariablesTable
+            vars={vars}
+            loading={varsLoading}
+            error={varsError}
+            onEdit={openEdit}
+            hasContext={!!ctx}
+            titleText={ctx ? (ctx.kind === "project" ? "Проект: " : "Группа: ") + ctx.name : "Выберите контекст"}
+          />
+        ) : (
+          <Welcome
+            groupsCount={landingCounts.groups}
+            projectsCount={landingCounts.projects}
+            sample={landingProjects}
+            onPickProject={pickProject}
+          />
+        )}
       </main>
 
       <VariableModal
