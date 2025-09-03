@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
@@ -15,10 +16,10 @@ HEADERS = {
 
 
 class GitLabClient:
-    """Lightweight GitLab API wrapper (REST v4) focused on **file** variables."""
+    """Minimal GitLab REST v4 client for file variables (projects & groups)."""
 
     def __init__(self, http: httpx.AsyncClient):
-        self.http = http
+        self.http = http  # base_url=settings.GITLAB_BASE_URL
 
     # ---------- low-level ----------
     @staticmethod
@@ -30,6 +31,26 @@ class GitLabClient:
                 detail = r.text
             raise HTTPException(status_code=r.status_code, detail=detail)
 
+    async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        r = await self.http.request(method, url, headers=HEADERS, **kwargs)
+        # Нормализуем redirect на абсолютный external_url (типа http://localhost)
+        if 300 <= r.status_code < 400:
+            loc = r.headers.get("location")
+            if not loc:
+                return r
+            parsed = urlparse(loc)
+            # Переписываем в относительный, чтобы использовался base_url клиента
+            if parsed.scheme and parsed.netloc and settings.GITLAB_REWRITE_REDIRECTS:
+                rel = parsed.path or "/"
+                if parsed.query:
+                    rel = f"{rel}?{parsed.query}"
+                r = await self.http.request(method, rel, headers=HEADERS, **kwargs)
+                return r
+            if not parsed.netloc:
+                r = await self.http.request(method, loc, headers=HEADERS, **kwargs)
+                return r
+        return r
+
     async def _paginated_get(self, url: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         params = dict(params or {})
         params.setdefault("per_page", settings.GITLAB_PER_PAGE)
@@ -38,7 +59,7 @@ class GitLabClient:
         while True:
             p = dict(params)
             p["page"] = page
-            r = await self.http.get(url, headers=HEADERS, params=p, timeout=settings.REQUEST_TIMEOUT_S)
+            r = await self._request("GET", url, params=p, timeout=settings.REQUEST_TIMEOUT_S)
             self._raise_for_status(r)
             chunk = r.json()
             if not isinstance(chunk, list):
@@ -52,7 +73,7 @@ class GitLabClient:
 
     # ---------- meta ----------
     async def get_user(self) -> Dict[str, Any]:
-        r = await self.http.get("/user", headers=HEADERS, timeout=settings.REQUEST_TIMEOUT_S)
+        r = await self._request("GET", "/user", timeout=settings.REQUEST_TIMEOUT_S)
         self._raise_for_status(r)
         return r.json()
 
@@ -60,9 +81,7 @@ class GitLabClient:
     async def list_groups(self, search: Optional[str] = None) -> List[Dict[str, Any]]:
         params: Dict[str, Any] = {
             "membership": True,
-            "all_available": False,
             "include_subgroups": True,
-            "top_level_only": False,
             "order_by": "path",
             "sort": "asc",
         }
@@ -74,18 +93,31 @@ class GitLabClient:
             for g in items
         ]
 
-    # ---------- projects ----------
+    # ---------- projects (все доступные токену) ----------
     async def list_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Возвращает все проекты, доступные токену (без фильтрации по ролям).
+        """
         if group_id:
-            params: Dict[str, Any] = {"with_shared": True, "order_by": "path", "sort": "asc"}
+            params: Dict[str, Any] = {
+                "with_shared": True,
+                "order_by": "path",
+                "sort": "asc",
+            }
             if search:
                 params["search"] = search
             items = await self._paginated_get(f"/groups/{group_id}/projects", params)
         else:
-            params = {"membership": True, "simple": True, "order_by": "path", "sort": "asc"}
+            params = {
+                "membership": True,
+                "simple": True,  # лёгкий payload для UI
+                "order_by": "path",
+                "sort": "asc",
+            }
             if search:
                 params["search"] = search
             items = await self._paginated_get("/projects", params)
+
         return [
             {
                 "id": p["id"],
@@ -95,6 +127,16 @@ class GitLabClient:
             }
             for p in items
         ]
+
+    # ---------- environments ----------
+    async def list_project_environments(self, project_id: int) -> List[str]:
+        r = await self._request("GET", f"/projects/{project_id}/environments", params={"states": "available"})
+        if r.status_code in (400, 422):
+            r = await self._request("GET", f"/projects/{project_id}/environments")
+        self._raise_for_status(r)
+        items = r.json()
+        names = [it.get("name") for it in items if isinstance(it, dict) and it.get("name")]
+        return sorted({n for n in names}, key=lambda s: s.lower())
 
     # ---------- project variables (file) ----------
     async def project_file_vars(self, project_id: int) -> List[Dict[str, Any]]:
@@ -107,6 +149,7 @@ class GitLabClient:
                 "protected": v.get("protected", False),
                 "masked": v.get("masked", False),
                 "raw": v.get("raw", False),
+                "hidden": v.get("hidden", False),  # GitLab 17.4+
             }
             for v in items
             if v.get("variable_type") == "file"
@@ -116,9 +159,9 @@ class GitLabClient:
 
     async def project_file_var_get(self, project_id: int, key: str, env: str = "*") -> Dict[str, Any]:
         params = {"filter[environment_scope]": env}
-        r = await self.http.get(
+        r = await self._request(
+            "GET",
             f"/projects/{project_id}/variables/{key}",
-            headers=HEADERS,
             params=params,
             timeout=settings.REQUEST_TIMEOUT_S,
         )
@@ -139,6 +182,7 @@ class GitLabClient:
                 "protected": v.get("protected", False),
                 "masked": v.get("masked", False),
                 "raw": v.get("raw", False),
+                "hidden": v.get("hidden", False),  # GitLab 17.4+
             }
             for v in items
             if v.get("variable_type") == "file"
@@ -148,9 +192,9 @@ class GitLabClient:
 
     async def group_file_var_get(self, group_id: int, key: str, env: str = "*") -> Dict[str, Any]:
         params = {"filter[environment_scope]": env}
-        r = await self.http.get(
+        r = await self._request(
+            "GET",
             f"/groups/{group_id}/variables/{key}",
-            headers=HEADERS,
             params=params,
             timeout=settings.REQUEST_TIMEOUT_S,
         )
@@ -160,27 +204,16 @@ class GitLabClient:
             raise HTTPException(404, "Variable exists but is not of type 'file'")
         return v
 
-    # ---------- deletes (helpers) ----------
+    # ---------- deletes ----------
     async def _project_var_delete(self, project_id: int, key: str, env: str = "*") -> None:
         params = {"filter[environment_scope]": env}
-        r = await self.http.delete(
-            f"/projects/{project_id}/variables/{key}",
-            headers=HEADERS,
-            params=params,
-            timeout=settings.REQUEST_TIMEOUT_S,
-        )
-        # 204 OK или 404 (уже нет) — оба считаем успехом в сценарии переименования
+        r = await self._request("DELETE", f"/projects/{project_id}/variables/{key}", params=params)
         if r.status_code not in (204, 404):
             self._raise_for_status(r)
 
     async def _group_var_delete(self, group_id: int, key: str, env: str = "*") -> None:
         params = {"filter[environment_scope]": env}
-        r = await self.http.delete(
-            f"/groups/{group_id}/variables/{key}",
-            headers=HEADERS,
-            params=params,
-            timeout=settings.REQUEST_TIMEOUT_S,
-        )
+        r = await self._request("DELETE", f"/groups/{group_id}/variables/{key}", params=params)
         if r.status_code not in (204, 404):
             self._raise_for_status(r)
 
@@ -188,11 +221,16 @@ class GitLabClient:
     async def project_file_var_upsert(self, project_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
         new_key = payload["key"]
         new_env = payload.get("environment_scope", "*")
+
+        # GitLab 17.4: создание hidden — через masked_and_hidden=true
+        mah = bool(payload.get("masked_and_hidden", False))
+        masked = bool(payload.get("masked", False) or mah)
+
         body_common = {
             "value": payload["value"],
             "variable_type": "file",
             "protected": bool(payload.get("protected", False)),
-            "masked": bool(payload.get("masked", False)),
+            "masked": masked,  # на PUT используем masked; для скрытой создадим заново
             "raw": bool(payload.get("raw", False)),
             "environment_scope": new_env,
         }
@@ -203,16 +241,17 @@ class GitLabClient:
         is_rename = (original_key != new_key) or (original_env != new_env)
 
         if is_rename:
-            # 1) создаём новую
-            body_create = dict(body_common, key=new_key)
-            r_create = await self.http.post(
+            # создаём новую (если надо — скрытую), затем удаляем старую
+            create_body = dict(body_common, key=new_key)
+            if mah:
+                create_body["masked_and_hidden"] = True
+            r_create = await self._request(
+                "POST",
                 f"/projects/{project_id}/variables",
-                headers=HEADERS,
-                content=json.dumps(body_create),
+                content=json.dumps(create_body),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_create)
-            # 2) удаляем старую
             await self._project_var_delete(project_id, original_key, original_env)
             return {
                 "status": "renamed",
@@ -220,46 +259,73 @@ class GitLabClient:
                 "deleted_old": {"key": original_key, "environment_scope": original_env},
             }
 
-        # обычный upsert
-        r_get = await self.http.get(
+        # не переименовываем — проверим, существует ли
+        r_get = await self._request(
+            "GET",
             f"/projects/{project_id}/variables/{new_key}",
-            headers=HEADERS,
             params=params_new,
             timeout=settings.REQUEST_TIMEOUT_S,
         )
         if r_get.status_code == 200:
-            r_put = await self.http.put(
+            if mah:
+                # повыcить до hidden нельзя PUT'ом — пересоздаём
+                await self._project_var_delete(project_id, new_key, new_env)
+                create_body = dict(body_common, key=new_key, masked=True)
+                create_body["masked_and_hidden"] = True
+                r_create = await self._request(
+                    "POST",
+                    f"/projects/{project_id}/variables",
+                    content=json.dumps(create_body),
+                    timeout=settings.REQUEST_TIMEOUT_S,
+                )
+                self._raise_for_status(r_create)
+                return {
+                    "status": "renamed",
+                    "variable": r_create.json(),
+                    "deleted_old": {"key": new_key, "environment_scope": new_env},
+                }
+
+            # обычный апдейт
+            r_put = await self._request(
+                "PUT",
                 f"/projects/{project_id}/variables/{new_key}",
-                headers=HEADERS,
                 params=params_new,
                 content=json.dumps(body_common),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_put)
             return {"status": "updated", "variable": r_put.json()}
-        elif r_get.status_code == 404:
-            body_create = dict(body_common, key=new_key)
-            r_post = await self.http.post(
+
+        if r_get.status_code == 404:
+            # создаём новую
+            create_body = dict(body_common, key=new_key)
+            if mah:
+                create_body["masked_and_hidden"] = True
+            r_post = await self._request(
+                "POST",
                 f"/projects/{project_id}/variables",
-                headers=HEADERS,
-                content=json.dumps(body_create),
+                content=json.dumps(create_body),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_post)
             return {"status": "created", "variable": r_post.json()}
-        else:
-            self._raise_for_status(r_get)
+
+        self._raise_for_status(r_get)
         raise HTTPException(500, "Unexpected flow")
 
     # ---------- upsert with rename (group) ----------
     async def group_file_var_upsert(self, group_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
         new_key = payload["key"]
         new_env = payload.get("environment_scope", "*")
+
+        mah = bool(payload.get("masked_and_hidden", False))
+        masked = bool(payload.get("masked", False) or mah)
+
         body_common = {
             "value": payload["value"],
             "variable_type": "file",
             "protected": bool(payload.get("protected", False)),
-            "masked": bool(payload.get("masked", False)),
+            "masked": masked,
             "raw": bool(payload.get("raw", False)),
             "environment_scope": new_env,
         }
@@ -270,11 +336,13 @@ class GitLabClient:
         is_rename = (original_key != new_key) or (original_env != new_env)
 
         if is_rename:
-            body_create = dict(body_common, key=new_key)
-            r_create = await self.http.post(
+            create_body = dict(body_common, key=new_key)
+            if mah:
+                create_body["masked_and_hidden"] = True
+            r_create = await self._request(
+                "POST",
                 f"/groups/{group_id}/variables",
-                headers=HEADERS,
-                content=json.dumps(body_create),
+                content=json.dumps(create_body),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_create)
@@ -285,32 +353,52 @@ class GitLabClient:
                 "deleted_old": {"key": original_key, "environment_scope": original_env},
             }
 
-        r_get = await self.http.get(
+        r_get = await self._request(
+            "GET",
             f"/groups/{group_id}/variables/{new_key}",
-            headers=HEADERS,
             params=params_new,
             timeout=settings.REQUEST_TIMEOUT_S,
         )
         if r_get.status_code == 200:
-            r_put = await self.http.put(
+            if mah:
+                await self._group_var_delete(group_id, new_key, new_env)
+                create_body = dict(body_common, key=new_key, masked=True)
+                create_body["masked_and_hidden"] = True
+                r_create = await self._request(
+                    "POST",
+                    f"/groups/{group_id}/variables",
+                    content=json.dumps(create_body),
+                    timeout=settings.REQUEST_TIMEOUT_S,
+                )
+                self._raise_for_status(r_create)
+                return {
+                    "status": "renamed",
+                    "variable": r_create.json(),
+                    "deleted_old": {"key": new_key, "environment_scope": new_env},
+                }
+
+            r_put = await self._request(
+                "PUT",
                 f"/groups/{group_id}/variables/{new_key}",
-                headers=HEADERS,
                 params=params_new,
                 content=json.dumps(body_common),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_put)
             return {"status": "updated", "variable": r_put.json()}
-        elif r_get.status_code == 404:
-            body_create = dict(body_common, key=new_key)
-            r_post = await self.http.post(
+
+        if r_get.status_code == 404:
+            create_body = dict(body_common, key=new_key)
+            if mah:
+                create_body["masked_and_hidden"] = True
+            r_post = await self._request(
+                "POST",
                 f"/groups/{group_id}/variables",
-                headers=HEADERS,
-                content=json.dumps(body_create),
+                content=json.dumps(create_body),
                 timeout=settings.REQUEST_TIMEOUT_S,
             )
             self._raise_for_status(r_post)
             return {"status": "created", "variable": r_post.json()}
-        else:
-            self._raise_for_status(r_get)
+
+        self._raise_for_status(r_get)
         raise HTTPException(500, "Unexpected flow")

@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     )
 
     # Required
-    GITLAB_BASE_URL: str          # e.g. https://gitlab.example.com/api/v4
-    GITLAB_TOKEN: str             # PAT with `api` scope
+    GITLAB_BASE_URL: str # e.g. https://gitlab.example.com/api/v4
+    GITLAB_TOKEN: str  # PAT with `api` scope
 
     # Optional
     GITLAB_PER_PAGE: int = 100
