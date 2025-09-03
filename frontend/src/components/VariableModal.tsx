@@ -25,7 +25,7 @@ export function VariableModal(props: {
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/35" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="max-w-[1100px] w-[95vw] max-h-[88vh] flex flex-col rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+        <div className="w-[95vw] h-[85vh] max-w-[100vw] max-h-[100vh] min-w-[320px] min-h-[260px] resize overflow-auto flex flex-col rounded-2xl bg-white border border-slate-200 shadow-2xl">
           {/* header */}
           <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
             <div className="text-lg font-semibold">
