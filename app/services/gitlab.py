@@ -123,6 +123,7 @@ class GitLabClient:
                 "with_shared": True,
                 "order_by": "path",
                 "sort": "asc",
+                "min_access_level": settings.GITLAB_MIN_ACCESS_LEVEL,
             }
             if search:
                 params["search"] = search
@@ -133,6 +134,7 @@ class GitLabClient:
                 "simple": True,  # лёгкий payload для UI
                 "order_by": "path",
                 "sort": "asc",
+                "min_access_level": settings.GITLAB_MIN_ACCESS_LEVEL,
             }
             if search:
                 params["search"] = search

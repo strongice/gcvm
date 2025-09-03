@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { Group, Project, VarEditing, VarSummary } from "./types";
 import { Sidebar } from "./components/Sidebar";
@@ -22,12 +22,15 @@ export default function App() {
   const [groupSearch, setGroupSearch] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectSearch, setProjectSearch] = useState("");
+  const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
+  const projectsReqRef = useRef(0);
 
   const [ctx, setCtx] = useState<{ kind: "group" | "project"; id: number; name: string; parent?: { id: number; name: string } } | null>(null);
 
   const [vars, setVars] = useState<VarSummary[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
   const [varsError, setVarsError] = useState<string | null>(null);
+  const [canCreate, setCanCreate] = useState<boolean>(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
@@ -61,22 +64,28 @@ export default function App() {
 
   async function loadVars(c: { kind: "group" | "project"; id: number; name: string }, silent = false) {
     setVarsLoading(!silent);
+    // По умолчанию отключаем создание до получения ответа
+    setCanCreate(false);
     try {
       const v = await api.vars(c);
       setVars(v);
       setVarsError(null);
+      setCanCreate(true);
     } catch (e: any) {
       const status: number = e?.status ?? 0;
       if (status === 403) {
         setVars([]);
         setVarsError("Нет доступа к переменным для выбранной группы.");
+        setCanCreate(false);
       } else if (status === 404) {
         setVars([]);
         setVarsError("Контекст не найден. Выберите группу/проект заново.");
         setCtx(null);
+        setCanCreate(false);
       } else {
         setVars([]);
         setVarsError("Не удалось загрузить переменные.");
+        setCanCreate(false);
       }
     } finally {
       setVarsLoading(false);
@@ -87,7 +96,15 @@ export default function App() {
   async function pickGroup(g: Group) {
     const c = { kind: "group" as const, id: g.id, name: g.full_path };
     setCtx(c);
-    setProjects(await api.projects(g.id, projectSearch));
+    // очистим текущие проекты и запустим «токенизированную» загрузку
+    setProjects([]);
+    setProjectsLoading(true);
+    const reqId = ++projectsReqRef.current;
+    const list = await api.projects(g.id, projectSearch);
+    if (reqId === projectsReqRef.current) {
+      setProjects(list);
+      setProjectsLoading(false);
+    }
     await loadVars(c, true);
   }
 
@@ -282,10 +299,21 @@ export default function App() {
             <button
               className={cls(
                 "hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border",
-                ctx ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
+                ctx && canCreate && !varsLoading ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
               )}
               onClick={openCreate}
-              disabled={!ctx}
+              disabled={!ctx || !canCreate || varsLoading}
+              title={
+                !ctx
+                  ? "Выберите группу или проект"
+                  : varsLoading
+                  ? "Загрузка данных…"
+                  : !canCreate
+                  ? (ctx?.kind === 'group'
+                      ? "Нет прав на редактирование переменных этой группы"
+                      : "Нет прав на редактирование переменных этого проекта")
+                  : undefined
+              }
             >
               <Plus size={16} /> Создать
             </button>
@@ -311,11 +339,19 @@ export default function App() {
             }}
             onPickGroup={pickGroup}
             projects={projects}
+            projectsLoading={projectsLoading}
             projectSearch={projectSearch}
             onProjectSearchChange={async (q) => {
               setProjectSearch(q);
               const gid = ctx?.kind === "group" ? ctx.id : ctx?.parent?.id || null;
-              setProjects(await api.projects(gid as any, q));
+              if (!gid) { setProjects([]); return; }
+              setProjectsLoading(true);
+              const reqId = ++projectsReqRef.current;
+              const list = await api.projects(gid as any, q);
+              if (reqId === projectsReqRef.current) {
+                setProjects(list);
+                setProjectsLoading(false);
+              }
             }}
             onPickProject={pickProject}
             selectedProjectId={selectedProjectId}
@@ -337,11 +373,19 @@ export default function App() {
                 }}
                 onPickGroup={(g) => { setSidebarOpen(false); pickGroup(g); }}
                 projects={projects}
+                projectsLoading={projectsLoading}
                 projectSearch={projectSearch}
                 onProjectSearchChange={async (q) => {
                   setProjectSearch(q);
                   const gid = ctx?.kind === "group" ? ctx.id : ctx?.parent?.id || null;
-                  setProjects(await api.projects(gid as any, q));
+                  if (!gid) { setProjects([]); return; }
+                  setProjectsLoading(true);
+                  const reqId = ++projectsReqRef.current;
+                  const list = await api.projects(gid as any, q);
+                  if (reqId === projectsReqRef.current) {
+                    setProjects(list);
+                    setProjectsLoading(false);
+                  }
                 }}
                 onPickProject={(p) => { setSidebarOpen(false); pickProject(p); }}
                 selectedProjectId={selectedProjectId}

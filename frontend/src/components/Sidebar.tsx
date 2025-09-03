@@ -13,6 +13,7 @@ export function Sidebar(props: {
   onPickGroup: (g: Group) => void;
 
   projects: Project[];
+  projectsLoading?: boolean;
   projectSearch: string;
   onProjectSearchChange: (q: string) => void;
   onPickProject: (p: Project) => void;
@@ -26,6 +27,7 @@ export function Sidebar(props: {
     onGroupSearchChange,
     onPickGroup,
     projects,
+    projectsLoading,
     projectSearch,
     onProjectSearchChange,
     onPickProject,
@@ -64,7 +66,7 @@ export function Sidebar(props: {
                   </button>
 
                   {opened && (
-                    <div className="p-3 border-t border-slate-200">
+                      <div className="p-3 border-t border-slate-200">
                       <div className="relative mb-2">
                         <input
                           value={projectSearch}
@@ -75,7 +77,11 @@ export function Sidebar(props: {
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       </div>
                       <div className="p-1">
-                        {projects.map((p) => {
+                        {projectsLoading ? (
+                          <div className="px-3 py-2 text-sm text-slate-500">Загрузка…</div>
+                        ) : projects.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-slate-500">Нет проектов</div>
+                        ) : projects.map((p) => {
                           const selected = selectedProjectId === p.id;
                           return (
                             <button
@@ -88,9 +94,6 @@ export function Sidebar(props: {
                             </button>
                           );
                         })}
-                        {projects.length === 0 && (
-                          <div className="px-3 py-2 text-xs text-slate-500">Нет проектов</div>
-                        )}
                       </div>
                     </div>
                   )}

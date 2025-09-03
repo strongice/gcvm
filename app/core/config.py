@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # при работе через base_url (см. services/gitlab.py)
     GITLAB_REWRITE_REDIRECTS: bool = True
 
+    # Минимальный уровень доступа для проектов, чтобы показывать их в UI
+    # 40 = Maintainer, 50 = Owner. По умолчанию фильтруем проекты, где у токена есть права Maintainer+
+    GITLAB_MIN_ACCESS_LEVEL: int = 40
+
     # Логирование
     LOG_LEVEL: str = "INFO"  # DEBUG/INFO/WARNING/ERROR
     GITLAB_LOG_LEVEL: str = "WARNING"  # уровень логов HTTP-вызовов к GitLab
