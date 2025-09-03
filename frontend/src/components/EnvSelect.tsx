@@ -44,7 +44,8 @@ export function EnvSelect({
       const a = anchorRef.current;
       if (!a) return;
       const r = a.getBoundingClientRect();
-      setPos({ top: r.bottom + 6 + window.scrollY, left: r.left + window.scrollX, width: r.width });
+      // Используем fixed-позиционирование, поэтому координаты берём из viewport без scroll offsets
+      setPos({ top: r.bottom + 6, left: r.left, width: r.width });
     }
     place();
     window.addEventListener("resize", place);
@@ -71,11 +72,11 @@ export function EnvSelect({
           readOnly
           value={value}
           onClick={() => setOpen(true)}
-          className="w-[220px] px-3 py-2 rounded-xl border border-slate-300 bg-white cursor-pointer"
+          className="w-[220px] pl-3 pr-9 h-10 leading-10 rounded-xl border border-slate-300 bg-white cursor-pointer"
           placeholder="*"
           title="Нажмите чтобы выбрать окружение или начните ввод в выпадающем поиске"
         />
-        <span className="pointer-events-none absolute right-3 top-2.5 text-slate-500" aria-hidden>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden>
           ▾
         </span>
       </div>
@@ -83,8 +84,8 @@ export function EnvSelect({
       {open && (
         <div
           ref={popRef}
-          className="absolute z-50"
-          style={{ position: "absolute", top: pos.top, left: pos.left, width: pos.width }}
+          className="fixed z-50"
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
         >
           <div className="rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
             <div className="p-2 border-b border-slate-200">

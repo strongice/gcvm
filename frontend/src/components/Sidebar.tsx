@@ -33,7 +33,7 @@ export function Sidebar(props: {
   } = props;
 
   return (
-    <aside className="w-[320px] shrink-0 p-4">
+    <aside className="w-[320px] shrink-0 p-3">
       <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden">
         <div className="p-4 border-b border-slate-200">
           <div className="text-xs text-slate-500 mb-1">Группы</div>

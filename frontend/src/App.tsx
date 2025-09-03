@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import { VariablesTable } from "./components/VariablesTable";
 import { VariableModal } from "./components/VariableModal";
 import SettingsModal from "./components/SettingsModal";
+import { Menu, Plus, Settings as Gear } from "lucide-react";
 
 /* утилита классов */
 function cls(...parts: (string | false | undefined)[]) {
@@ -15,6 +16,7 @@ export default function App() {
   const [tokenInfo, setTokenInfo] = useState<string>("…");
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupSearch, setGroupSearch] = useState("");
@@ -253,41 +255,42 @@ export default function App() {
   }, [modalOpen, modalInitial, ctx]);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
+    <div className="min-h-screen text-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-4 py-2 flex items-center gap-3">
-          <div className="text-[15px] font-semibold">GitLab: CI/CD Variables</div>
-          <span className="ml-auto px-2 py-1 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
-            Token OK: {tokenInfo}
-          </span>
-          {/* <button
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
-            onClick={() => ctx && loadVars(ctx)}
-          >
-            Обновить
-          </button> */}
-          <button
-            className={cls(
-              "px-3 py-1.5 rounded-xl border text-sm",
-              ctx ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
-            )}
-            onClick={openCreate}
-            disabled={!ctx}
-          >
-            Создать
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-3">
+          <button className="lg:hidden p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню">
+            <Menu size={18} />
           </button>
-          <button
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
-            onClick={() => setSettingsOpen(true)}
-          >
-            Настройки
-          </button>
+          <div className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="px-2 py-1 text-xs rounded-full border border-emerald-300/70 bg-emerald-50 text-emerald-700">
+              Token OK: {tokenInfo}
+            </span>
+            <button
+              className={cls(
+                "hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-sm border",
+                ctx ? "border-slate-200 bg-white hover:bg-slate-50" : "border-slate-200 text-slate-400 cursor-not-allowed"
+              )}
+              onClick={openCreate}
+              disabled={!ctx}
+            >
+              <Plus size={16} /> Создать
+            </button>
+            <button
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Gear size={16} /> Настройки
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-[1400px] mx-auto flex">
-        <Sidebar
+        {/* Sidebar Desktop */}
+        <div className="hidden lg:block">
+          <Sidebar
           groups={groups}
           groupSearch={groupSearch}
           onGroupSearchChange={async (q) => {
@@ -305,7 +308,36 @@ export default function App() {
           onPickProject={pickProject}
           selectedProjectId={selectedProjectId}
           currentGroupName={ctx?.kind === "group" ? ctx.name : ctx?.parent?.name}
-        />
+          />
+        </div>
+
+        {/* Sidebar Mobile Drawer */}
+        {sidebarOpen && (
+          <div className="lg:hidden fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[360px] bg-white border-r border-slate-200 p-2 overflow-auto">
+              <Sidebar
+                groups={groups}
+                groupSearch={groupSearch}
+                onGroupSearchChange={async (q) => {
+                  setGroupSearch(q);
+                  setGroups(await api.groups(q));
+                }}
+                onPickGroup={(g) => { setSidebarOpen(false); pickGroup(g); }}
+                projects={projects}
+                projectSearch={projectSearch}
+                onProjectSearchChange={async (q) => {
+                  setProjectSearch(q);
+                  const gid = ctx?.kind === "group" ? ctx.id : ctx?.parent?.id || null;
+                  setProjects(await api.projects(gid as any, q));
+                }}
+                onPickProject={(p) => { setSidebarOpen(false); pickProject(p); }}
+                selectedProjectId={selectedProjectId}
+                currentGroupName={ctx?.kind === "group" ? ctx.name : ctx?.parent?.name}
+              />
+            </div>
+          </div>
+        )}
 
         <VariablesTable
           vars={vars}
