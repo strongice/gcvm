@@ -327,7 +327,7 @@ export default function App() {
         {sidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[360px] bg-white border-r border-slate-200 p-2 overflow-auto">
+            <div className="absolute left-0 top-0 bottom-0 w-[86vw] max-w-[420px] bg-white border-r border-slate-200 p-2 overflow-auto">
               <Sidebar
                 groups={groups}
                 groupSearch={groupSearch}
