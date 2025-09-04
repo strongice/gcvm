@@ -83,6 +83,13 @@ function ProjectPage() {
           setVarsError(null);
           setCanCreate(true);
           setEnvOptions(bundle.environments || []);
+          // ensure sidebar has an initial project list for parent group
+          if (gid) {
+            setProjectsLoading(true);
+            const reqId = ++projectsReqRef.current;
+            const list = await api.projectsLimited(gid, '', 50);
+            if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+          }
         } catch (e: any) {
           // fallback to individual calls if bundle fails
           await loadVars(projectId);

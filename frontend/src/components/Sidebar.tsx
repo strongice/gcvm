@@ -37,6 +37,77 @@ export function Sidebar(props: {
   } = props;
 
   const [openGroupId, setOpenGroupId] = useState<number | null>(initialOpenGroupId ?? null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const restoredRef = React.useRef(false); // not used to short-circuit anymore
+  const restoringNowRef = React.useRef(false);
+
+  // Restore scroll position across page reloads (desktop sidebar)
+  React.useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ui_sidebar_scroll_top');
+      const top = raw ? parseInt(raw, 10) : 0;
+      if (!isNaN(top) && scrollRef.current) {
+        // Delay to ensure content is rendered
+        const restore = () => {
+          if (scrollRef.current) scrollRef.current.scrollTop = top;
+        };
+        restoringNowRef.current = true;
+        requestAnimationFrame(() => {
+          restore();
+          // second frame to catch layout shifts
+          requestAnimationFrame(() => {
+            restore();
+            // do not short-circuit further restores here; groups may not be loaded yet
+            setTimeout(() => { restoringNowRef.current = false; }, 50);
+          });
+        });
+      }
+    } catch {}
+    const onBeforeUnload = () => rememberScroll();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      // persist on unmount as a fallback
+      rememberScroll();
+    };
+  }, []);
+
+  // Restore again when groups/open state arrive after async fetch
+  React.useEffect(() => {
+    try {
+      const anchor = sessionStorage.getItem('ui_sidebar_anchor_gid');
+      if (anchor) {
+        const el = document.getElementById(`sb-group-${anchor}`);
+        if (el && scrollRef.current) {
+          // Scroll target group into view within the sidebar container
+          (el as HTMLElement).scrollIntoView({ block: 'center' });
+          sessionStorage.removeItem('ui_sidebar_anchor_gid');
+          return;
+        }
+      }
+      const raw = sessionStorage.getItem('ui_sidebar_scroll_top');
+      const top = raw ? parseInt(raw, 10) : 0;
+      if (!isNaN(top) && scrollRef.current && (groups?.length || 0) > 0) {
+        restoringNowRef.current = true;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) scrollRef.current.scrollTop = top;
+          // one more frame after potential expand
+          requestAnimationFrame(() => {
+            if (scrollRef.current) scrollRef.current.scrollTop = top;
+            setTimeout(() => { restoringNowRef.current = false; }, 50);
+          });
+        });
+      }
+    } catch {}
+  }, [groups, openGroupId]);
+
+  const rememberScroll = React.useCallback(() => {
+    try {
+      if (restoringNowRef.current) return;
+      const top = scrollRef.current?.scrollTop ?? 0;
+      sessionStorage.setItem('ui_sidebar_scroll_top', String(Math.max(0, Math.floor(top))));
+    } catch {}
+  }, []);
   React.useEffect(() => {
     if (typeof initialOpenGroupId !== 'undefined') {
       setOpenGroupId(initialOpenGroupId);
@@ -44,7 +115,11 @@ export function Sidebar(props: {
   }, [initialOpenGroupId]);
 
   return (
-    <aside className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden">
+    <aside
+      ref={scrollRef}
+      onScroll={rememberScroll}
+      className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden"
+    >
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         {/* Группы + Аккордеон */}
         <div className="p-3 border-b border-slate-200">
@@ -62,9 +137,12 @@ export function Sidebar(props: {
             {[...groups].sort((a,b)=> (a.full_path||a.name).localeCompare(b.full_path||b.name)).map((g) => {
               const opened = openGroupId === g.id;
               return (
-                <div key={g.id} className="rounded-2xl border border-slate-200 overflow-hidden">
-                  <button
-                    onClick={async () => { setOpenGroupId(opened ? null : g.id); await onPickGroup(g); }}
+                <div key={g.id} id={`sb-group-${g.id}`} className="rounded-2xl border border-slate-200 overflow-hidden">
+              <button
+                    onClick={async () => {
+                      try { sessionStorage.setItem('ui_sidebar_anchor_gid', String(g.id)); } catch {}
+                      rememberScroll(); setOpenGroupId(opened ? null : g.id); await onPickGroup(g);
+                    }}
                     className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-white"
                     title={g.full_path}
                   >
@@ -94,7 +172,7 @@ export function Sidebar(props: {
                             <button
                               key={p.id}
                               title={p.name}
-                              onClick={() => onPickProject(p)}
+                              onClick={() => { try { if (openGroupId) sessionStorage.setItem('ui_sidebar_anchor_gid', String(openGroupId)); } catch {} ; rememberScroll(); onPickProject(p); }}
                               className={cls("w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50", selected && "bg-slate-100 border border-slate-200")}
                             >
                               <span className="block truncate">{p.name}</span>
