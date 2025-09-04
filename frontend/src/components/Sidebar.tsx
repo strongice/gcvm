@@ -63,13 +63,7 @@ export function Sidebar(props: {
         });
       }
     } catch {}
-    const onBeforeUnload = () => rememberScroll();
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      // persist on unmount as a fallback
-      rememberScroll();
-    };
+    return () => {};
   }, []);
 
   // Restore again when groups/open state arrive after async fetch
@@ -117,7 +111,6 @@ export function Sidebar(props: {
   return (
     <aside
       ref={scrollRef}
-      onScroll={rememberScroll}
       className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden"
     >
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
