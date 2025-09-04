@@ -7,7 +7,7 @@ import { Sidebar } from '../components/Sidebar';
 import { VariablesTable } from '../components/VariablesTable';
 import { VariableModal } from '../components/VariableModal';
 import SettingsModal from '../components/SettingsModal';
-import { Menu, Plus, Settings as Gear, CheckCircle, RefreshCcw } from 'lucide-react';
+import { Menu, Plus, Settings as Gear, RefreshCcw } from 'lucide-react';
 
 function cls(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(' '); }
 
@@ -19,8 +19,8 @@ function parseGroupId(): number | null {
 function GroupPage() {
   const groupId = parseGroupId();
 
-  const [tokenInfo, setTokenInfo] = useState<string>('');
   const [tokenOk, setTokenOk] = useState<boolean>(false);
+  const [healthReady, setHealthReady] = useState<boolean>(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupSearch, setGroupSearch] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -43,9 +43,10 @@ function GroupPage() {
 
   useEffect(() => {
     (async () => {
-      const h = await api.health();
-      setTokenOk(!!h?.ok);
-      setTokenInfo(h?.user?.name || h?.user?.username || '');
+      try {
+        const h = await api.health();
+        setTokenOk(!!h?.ok);
+      } catch { setTokenOk(false); } finally { setHealthReady(true); }
       const cfg = await api.uiConfig();
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
@@ -165,21 +166,6 @@ function GroupPage() {
           </button>
           <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GitLab: CI/CD Variables</a>
           <div className="ml-auto flex items-center gap-2">
-            {/* Mobile: icon only */}
-            <span
-              className={("inline-flex sm:hidden items-center justify-center w-8 h-8 rounded-full border ") + (tokenOk ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-rose-100 border-rose-200 text-rose-700")}
-              title={tokenOk ? 'GitLab: подключено' : 'GitLab: нет подключения'}
-            >
-              <CheckCircle size={16} />
-            </span>
-            {/* Desktop/Tablet: full pill with text */}
-            <span
-              className={("hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm select-none ") + (tokenOk ? "bg-emerald-100 border-emerald-200 text-emerald-800" : "bg-rose-100 border-rose-200 text-rose-800")}
-              title={tokenOk ? 'GitLab: подключено' : 'GitLab: нет подключения'}
-            >
-              <CheckCircle size={16} />
-              {tokenOk ? ("Token OK" + (tokenInfo ? ": " + tokenInfo : "")) : "Token Error"}
-            </span>
             <button
               className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!groupId || varsLoading) && 'opacity-60 cursor-not-allowed')}
               onClick={() => { if (groupId) loadVars(groupId); }}
@@ -202,6 +188,17 @@ function GroupPage() {
           </div>
         </div>
       </header>
+
+      {healthReady && !tokenOk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative z-10 max-w-md w-full rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 p-6 text-center shadow-2xl">
+            <div className="text-lg font-semibold mb-1">Нет подключения к GitLab</div>
+            <div className="text-sm mb-4">Проверьте указанные настройки и соединение с сетью.</div>
+            <button className="px-3 py-1.5 rounded-full border border-rose-300 bg-white hover:bg-rose-50 text-sm" onClick={() => window.location.reload()}>Повторить попытку</button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-[1400px] mx-auto flex px-2 sm:px-4 overflow-x-hidden w-full">
         <div className="hidden lg:block">
