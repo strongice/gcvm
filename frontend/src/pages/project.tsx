@@ -54,25 +54,40 @@ function ProjectPage() {
       const cfg = await api.uiConfig();
       setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
-      const g = await api.groups();
-      setGroups(g);
+
+      // use hint from previous page if available
+      try {
+        const raw = sessionStorage.getItem('ui_proj_hint');
+        if (raw) {
+          const hint = JSON.parse(raw);
+          if (hint?.name) setProjectName(hint.name);
+          if (hint?.namespace_id) setParentGroupId(hint.namespace_id);
+          if (hint?.namespace_full_path) setParentGroupName(hint.namespace_full_path);
+          sessionStorage.removeItem('ui_proj_hint');
+        }
+      } catch {}
+
+      // Load groups in background (for sidebar names)
+      api.groups().then(setGroups).catch(()=>{});
+
       if (projectId) {
+        // one combined backend call for project + variables + envs
         try {
-          const proj = await api.projectGet(projectId);
-          setProjectName(proj?.name || (proj as any)?.path_with_namespace || '');
+          const bundle = await api.projectBundle(projectId);
+          const proj = bundle.project;
+          if (!projectName) setProjectName(proj?.name || proj?.path_with_namespace || '');
           const gid = proj?.namespace_id || null;
-          setParentGroupId(gid);
-          if (gid) {
-            const parent = g.find(x => x.id === gid);
-            setParentGroupName(parent?.full_path);
-            setProjectsLoading(true);
-            const reqId = ++projectsReqRef.current;
-            const list = await api.projects(gid, projectSearch);
-            if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-          }
-        } catch {}
-        await loadVars(projectId);
-        setEnvOptions(await api.projectEnvs(projectId));
+          if (gid && !parentGroupId) setParentGroupId(gid);
+          if (!parentGroupName && proj?.namespace_full_path) setParentGroupName(proj.namespace_full_path);
+          setVars(bundle.variables || []);
+          setVarsError(null);
+          setCanCreate(true);
+          setEnvOptions(bundle.environments || []);
+        } catch (e: any) {
+          // fallback to individual calls if bundle fails
+          await loadVars(projectId);
+          setEnvOptions(await api.projectEnvs(projectId));
+        }
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,7 +227,7 @@ function ProjectPage() {
               if (!parentGroupId) { setProjects([]); return; }
               setProjectsLoading(true);
               const reqId = ++projectsReqRef.current;
-              const list = await api.projects(parentGroupId as any, q);
+              const list = await api.projectsLimited(parentGroupId as any, q, q ? 0 as any : 50);
               if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
             }}
             onPickProject={(p) => { window.location.href = `/project/${p.id}`; }}
@@ -239,7 +254,7 @@ function ProjectPage() {
                   if (!parentGroupId) { setProjects([]); return; }
                   setProjectsLoading(true);
                   const reqId = ++projectsReqRef.current;
-                  const list = await api.projects(parentGroupId as any, q);
+                  const list = await api.projectsLimited(parentGroupId as any, q, q ? 0 as any : 50);
                   if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
                 }}
                 onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}

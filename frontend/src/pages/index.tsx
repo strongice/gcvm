@@ -125,7 +125,7 @@ function IndexPage() {
         </div>
 
         {/* Welcome content */}
-        <Welcome groupsCount={counts.groups} projectsCount={counts.projects} sample={projects.filter((_,i)=>i<6)} onPickProject={(p) => { window.location.href = `/project/${p.id}`; }} />
+        <Welcome groupsCount={counts.groups} projectsCount={counts.projects} sample={projects.filter((_,i)=>i<6)} onPickProject={(p) => { try { sessionStorage.setItem('ui_proj_hint', JSON.stringify(p)); } catch {} ; window.location.href = `/project/${p.id}`; }} />
       </main>
 
       {/* Sidebar Mobile Drawer */}

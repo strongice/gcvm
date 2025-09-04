@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
 import logging
+import time
 
 from app.core.config import settings
 
@@ -24,6 +25,29 @@ class GitLabClient:
 
     def __init__(self, http: httpx.AsyncClient):
         self.http = http  # base_url=settings.GITLAB_BASE_URL
+        self._cache: Dict[Tuple[Any, ...], Tuple[float, Any]] = {}
+        try:
+            self._cache_ttl = max(0, int(settings.CACHE_TTL_S))
+        except Exception:
+            self._cache_ttl = 0
+
+    # ---------- cache helpers ----------
+    def _cache_get(self, key: Tuple[Any, ...]) -> Optional[Any]:
+        if self._cache_ttl <= 0:
+            return None
+        rec = self._cache.get(key)
+        if not rec:
+            return None
+        expires_at, value = rec
+        if expires_at >= time.time():
+            return value
+        self._cache.pop(key, None)
+        return None
+
+    def _cache_set(self, key: Tuple[Any, ...], value: Any) -> None:
+        if self._cache_ttl <= 0:
+            return
+        self._cache[key] = (time.time() + self._cache_ttl, value)
 
     # ---------- low-level ----------
     @staticmethod
@@ -116,6 +140,10 @@ class GitLabClient:
 
     # ---------- groups ----------
     async def list_groups(self, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        ck = ("list_groups", search or "")
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return cached
         params: Dict[str, Any] = {
             "membership": True,
             "include_subgroups": True,
@@ -125,10 +153,12 @@ class GitLabClient:
         if search:
             params["search"] = search
         items = await self._paginated_get("/groups", params)
-        return [
+        out = [
             {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
             for g in items
         ]
+        self._cache_set(ck, out)
+        return out
 
     async def count_groups(self) -> int:
         params: Dict[str, Any] = {
@@ -140,10 +170,18 @@ class GitLabClient:
     # list_top_groups / list_subgroups — удалены (откат варианта A)
 
     # ---------- projects (все доступные токену) ----------
-    async def list_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def list_projects(self, group_id: Optional[int] = None, search: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Возвращает все проекты, доступные токену (без фильтрации по ролям).
         """
+        ck = ("list_projects", group_id or 0, search or "", int(limit or 0))
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return cached
+
+        per_page = max(1, min(int(settings.GITLAB_PER_PAGE or 100), 200))
+        collected: List[Dict[str, Any]] = []
+
         if group_id:
             params: Dict[str, Any] = {
                 "with_shared": True,
@@ -153,7 +191,22 @@ class GitLabClient:
             }
             if search:
                 params["search"] = search
-            items = await self._paginated_get(f"/groups/{group_id}/projects", params)
+            # Manual pagination with early stop
+            page = 1
+            while True:
+                p = dict(params, per_page=per_page, page=page)
+                r = await self._request("GET", f"/groups/{group_id}/projects", params=p, timeout=settings.REQUEST_TIMEOUT_S)
+                self._raise_for_status(r)
+                chunk = r.json()
+                if not isinstance(chunk, list):
+                    raise HTTPException(502, "Unexpected response structure for projects")
+                collected.extend(chunk)
+                if limit and len(collected) >= limit:
+                    break
+                next_page = r.headers.get("X-Next-Page")
+                if not next_page or next_page == "0":
+                    break
+                page = int(next_page)
         else:
             params = {
                 "membership": True,
@@ -164,10 +217,24 @@ class GitLabClient:
             }
             if search:
                 params["search"] = search
-            items = await self._paginated_get("/projects", params)
+            page = 1
+            while True:
+                p = dict(params, per_page=per_page, page=page)
+                r = await self._request("GET", "/projects", params=p, timeout=settings.REQUEST_TIMEOUT_S)
+                self._raise_for_status(r)
+                chunk = r.json()
+                if not isinstance(chunk, list):
+                    raise HTTPException(502, "Unexpected response structure for projects")
+                collected.extend(chunk)
+                if limit and len(collected) >= limit:
+                    break
+                next_page = r.headers.get("X-Next-Page")
+                if not next_page or next_page == "0":
+                    break
+                page = int(next_page)
 
         out: List[Dict[str, Any]] = []
-        for p in items:
+        for p in collected[: (limit or len(collected))]:
             ns = (p.get("namespace", {}) or {})
             out.append(
                 {
@@ -178,6 +245,7 @@ class GitLabClient:
                     "namespace_full_path": ns.get("full_path"),
                 }
             )
+        self._cache_set(ck, out)
         return out
 
     async def count_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> int:
@@ -242,13 +310,27 @@ class GitLabClient:
 
     # ---------- environments ----------
     async def list_project_environments(self, project_id: int) -> List[str]:
+        ck = ("list_envs", project_id)
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return cached
         r = await self._request("GET", f"/projects/{project_id}/environments", params={"states": "available"})
         if r.status_code in (400, 422):
             r = await self._request("GET", f"/projects/{project_id}/environments")
         self._raise_for_status(r)
         items = r.json()
         names = [it.get("name") for it in items if isinstance(it, dict) and it.get("name")]
-        return sorted({n for n in names}, key=lambda s: s.lower())
+        out = sorted({n for n in names}, key=lambda s: s.lower())
+        self._cache_set(ck, out)
+        return out
+
+    async def project_bundle(self, project_id: int) -> Dict[str, Any]:
+        from asyncio import gather
+        proj_fut = self.get_project(project_id)
+        vars_fut = self.project_file_vars(project_id)
+        envs_fut = self.list_project_environments(project_id)
+        proj, vars_list, envs = await gather(proj_fut, vars_fut, envs_fut)
+        return {"project": proj, "variables": vars_list, "environments": envs}
 
     # ---------- project variables (all types) ----------
     async def project_file_vars(self, project_id: int) -> List[Dict[str, Any]]:

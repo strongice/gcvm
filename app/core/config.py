@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Optional
     GITLAB_PER_PAGE: int = 100
     REQUEST_TIMEOUT_S: float = 30.0
+    CACHE_TTL_S: int = 60  # in-memory cache TTL for list endpoints (0 to disable)
 
     # UI auto refresh (только секунды)
     UI_AUTO_REFRESH_ENABLED: bool = True

@@ -31,9 +31,10 @@ async def list_projects(
     request: Request,
     group_id: Optional[int] = Query(default=None),
     search: Optional[str] = Query(default=None),
+    limit: Optional[int] = Query(default=None, ge=1, le=1000),
 ) -> List[Dict[str, Any]]:
     gl = request.app.state.gitlab
-    return await gl.list_projects(group_id=group_id, search=search)
+    return await gl.list_projects(group_id=group_id, search=search, limit=limit)
 
 
 @router.get("/{project_id}")
@@ -75,6 +76,13 @@ async def project_envs(request: Request, project_id: int) -> Dict[str, List[str]
     gl = request.app.state.gitlab
     names = await gl.list_project_environments(project_id)
     return {"environments": names}
+
+
+@router.get("/{project_id}/bundle")
+async def project_bundle(request: Request, project_id: int) -> Dict[str, Any]:
+    gl = request.app.state.gitlab
+    data = await gl.project_bundle(project_id)
+    return data
 
 
 @router.post("/{project_id}/variables/upsert")

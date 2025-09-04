@@ -54,7 +54,7 @@ function GroupPage() {
       if (groupId) {
         setProjectsLoading(true);
         const reqId = ++projectsReqRef.current;
-        const list = await api.projects(groupId, projectSearch);
+        const list = await api.projectsLimited(groupId, projectSearch, projectSearch ? 0 as any : 50);
         if (reqId === projectsReqRef.current) {
           setProjects(list);
           setProjectsLoading(false);
@@ -229,10 +229,13 @@ function GroupPage() {
               if (!groupId) { setProjects([]); return; }
               setProjectsLoading(true);
               const reqId = ++projectsReqRef.current;
-              const list = await api.projects(groupId as any, q);
+              const list = await api.projectsLimited(groupId as any, q, q ? 0 as any : 50);
               if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
             }}
-            onPickProject={(p) => { window.location.href = `/project/${p.id}`; }}
+            onPickProject={(p) => {
+              try { sessionStorage.setItem('ui_proj_hint', JSON.stringify(p)); } catch {}
+              window.location.href = `/project/${p.id}`;
+            }}
             selectedProjectId={null}
             currentGroupName={groupName}
             initialOpenGroupId={groupId}
@@ -268,7 +271,7 @@ function GroupPage() {
                   if (!groupId) { setProjects([]); return; }
                   setProjectsLoading(true);
                   const reqId = ++projectsReqRef.current;
-                  const list = await api.projects(groupId as any, q);
+                  const list = await api.projectsLimited(groupId as any, q, q ? 0 as any : 50);
                   if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
                 }}
                 onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}

@@ -74,4 +74,16 @@ export const api = {
     const r = await fetch(`/api/projects/${project_id}`);
     return check<Project>(r);
   },
+  async projectBundle(project_id: number) {
+    const r = await fetch(`/api/projects/${project_id}/bundle`);
+    return check<{ project: Project; variables: VarSummary[]; environments: string[] }>(r);
+  },
+  async projectsLimited(group_id: number, search: string, limit: number) {
+    const qs = new URLSearchParams();
+    if (group_id) qs.set("group_id", String(group_id));
+    if (search) qs.set("search", search);
+    if (limit) qs.set("limit", String(limit));
+    const r = await fetch("/api/projects?" + qs.toString());
+    return check<Project[]>(r);
+  }
 };
