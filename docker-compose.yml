@@ -1,12 +1,12 @@
 services:
   web:
     build: .
-    image: gitlab-file-vars-webui:latest
+    image: strongice/gitlab-variables-webui:latest
     container_name: gitlab-ui
     env_file:
       - .env
     ports:
       - "80:8017"
-    # dns:
-    #   - 8.8.8.8
-    #   - 1.1.1.1
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
