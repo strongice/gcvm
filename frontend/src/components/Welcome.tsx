@@ -8,7 +8,7 @@ export function Welcome(props: {
   sample: Project[];
   onPickProject: (p: Project) => void;
 }) {
-  const { groupsCount, projectsCount, sample, onPickProject } = props;
+  const { groupsCount, projectsCount } = props; // sample список убран с лендинга
   return (
     <section className="flex-1 p-3">
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
@@ -36,25 +36,9 @@ export function Welcome(props: {
           </div>
         </div>
 
+        {/* Блок "Недавние проекты" удалён по требованию. Подсказку оставим для навигации. */}
         <div className="px-6 pb-6">
-          <div className="text-slate-700 font-medium mb-3">Недавние проекты</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {sample.map((p) => (
-              <button
-                key={p.id}
-                className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50"
-                title={p.path_with_namespace || p.name}
-                onClick={() => onPickProject(p)}
-              >
-                <div className="font-medium truncate">{p.path_with_namespace || p.name}</div>
-                {/* место под дополнительные метки при желании */}
-              </button>
-            ))}
-          </div>
-          {sample.length === 0 && (
-            <div className="text-sm text-slate-500">Проекты не найдены. Выберите группу слева.</div>
-          )}
-          <div className="text-xs text-slate-500 mt-4">Подсказка: можно использовать поиск по группам и проектам в левой панели.</div>
+          <div className="text-xs text-slate-500">Подсказка: используйте поиск по группам и проектам в левой панели.</div>
         </div>
       </div>
     </section>
@@ -62,4 +46,3 @@ export function Welcome(props: {
 }
 
 export default Welcome;
-

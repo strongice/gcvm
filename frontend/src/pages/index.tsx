@@ -25,6 +25,11 @@ function IndexPage() {
   const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
 
   useEffect(() => {
+    // Landing page: sidebar should start from top; clear any saved scroll
+    try {
+      sessionStorage.removeItem('ui_sidebar_anchor_gid');
+      sessionStorage.setItem('ui_sidebar_scroll_top', '0');
+    } catch {}
     (async () => {
       const h = await api.health();
       setTokenOk(!!h?.ok);

@@ -70,12 +70,30 @@ export function Sidebar(props: {
   React.useEffect(() => {
     try {
       const anchor = sessionStorage.getItem('ui_sidebar_anchor_gid');
-      if (anchor) {
-        const el = document.getElementById(`sb-group-${anchor}`);
-        if (el && scrollRef.current) {
-          // Scroll target group into view within the sidebar container
-          (el as HTMLElement).scrollIntoView({ block: 'center' });
-          sessionStorage.removeItem('ui_sidebar_anchor_gid');
+      if (anchor && scrollRef.current) {
+        const el = document.getElementById(`sb-group-${anchor}`) as HTMLElement | null;
+        const container = scrollRef.current;
+        if (el) {
+          // Compute relative offset within the sidebar container
+          const cRect = container.getBoundingClientRect();
+          const eRect = el.getBoundingClientRect();
+          const delta = eRect.top - cRect.top; // position of el inside container viewport
+          const target = container.scrollTop + delta - (container.clientHeight / 2) + (el.clientHeight / 2);
+          container.scrollTop = Math.max(0, target);
+          // If projects expand later, re-center after a tick
+          setTimeout(() => {
+            try {
+              const e2 = document.getElementById(`sb-group-${anchor}`);
+              if (e2 && scrollRef.current) {
+                const cR2 = scrollRef.current.getBoundingClientRect();
+                const eR2 = e2.getBoundingClientRect();
+                const d2 = eR2.top - cR2.top;
+                const t2 = scrollRef.current.scrollTop + d2 - (scrollRef.current.clientHeight / 2) + ((e2 as HTMLElement).clientHeight / 2);
+                scrollRef.current.scrollTop = Math.max(0, t2);
+              }
+            } catch {}
+            try { sessionStorage.removeItem('ui_sidebar_anchor_gid'); } catch {}
+          }, 120);
           return;
         }
       }
