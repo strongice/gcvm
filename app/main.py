@@ -6,7 +6,7 @@ import logging
 
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
@@ -68,16 +68,40 @@ async def ui_config():
     }
 
 
-# Static SPA (Vite build)
+# Static frontend (Vite build, MPA)
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
-    app.mount("/ui", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="ui")
+    # Root page
+    @app.get("/", include_in_schema=False)
+    async def root_index():
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    # MPA pages
+    @app.get("/group/{group_id}", include_in_schema=False)
+    async def ui_group_page(group_id: int):
+        path = FRONTEND_DIST / "group.html"
+        if path.exists():
+            return FileResponse(str(path))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/group/{group_id}/", include_in_schema=False)
+    async def ui_group_page_slash(group_id: int):
+        return await ui_group_page(group_id)
+
+    @app.get("/project/{project_id}", include_in_schema=False)
+    async def ui_project_page(project_id: int):
+        path = FRONTEND_DIST / "project.html"
+        if path.exists():
+            return FileResponse(str(path))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/project/{project_id}/", include_in_schema=False)
+    async def ui_project_page_slash(project_id: int):
+        return await ui_project_page(project_id)
+
+    # Static assets
     ASSETS_DIR = FRONTEND_DIST / "assets"
     if ASSETS_DIR.exists():
         app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="ui-assets")
-
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        return RedirectResponse(url="/ui/")

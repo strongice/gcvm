@@ -60,8 +60,8 @@ export function VariableModal(props: {
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className={"w-[95vw] h-[85vh] max-w-[100vw] max-h-[100vh] min-w-[320px] min-h-[260px] resize overflow-hidden flex flex-col bg-white border border-slate-200 rounded-2xl shadow-2xl relative"}>
+      <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
+        <div className={"w-[96vw] h-[90vh] sm:w-[95vw] sm:h-[85vh] max-w-[100vw] max-h-[100vh] min-w-[320px] min-h-[260px] resize overflow-hidden flex flex-col bg-white border border-slate-200 rounded-2xl shadow-2xl relative"}>
           {/* Close button in top-right corner */}
           <button
             className="absolute top-3 right-3 inline-flex items-center justify-center w-8 h-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"

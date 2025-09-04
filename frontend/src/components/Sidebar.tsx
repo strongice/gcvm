@@ -20,6 +20,7 @@ export function Sidebar(props: {
 
   selectedProjectId: number | null;
   currentGroupName?: string;
+  initialOpenGroupId?: number | null;
 }) {
   const {
     groups,
@@ -32,9 +33,15 @@ export function Sidebar(props: {
     onProjectSearchChange,
     onPickProject,
     selectedProjectId,
+    initialOpenGroupId,
   } = props;
 
-  const [openGroupId, setOpenGroupId] = useState<number | null>(null);
+  const [openGroupId, setOpenGroupId] = useState<number | null>(initialOpenGroupId ?? null);
+  React.useEffect(() => {
+    if (typeof initialOpenGroupId !== 'undefined') {
+      setOpenGroupId(initialOpenGroupId);
+    }
+  }, [initialOpenGroupId]);
 
   return (
     <aside className="w-[360px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden">

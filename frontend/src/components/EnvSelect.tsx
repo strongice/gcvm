@@ -46,7 +46,9 @@ export function EnvSelect({
       if (!a) return;
       const r = a.getBoundingClientRect();
       // Используем fixed-позиционирование, поэтому координаты берём из viewport без scroll offsets
-      setPos({ top: r.bottom + 6, left: r.left, width: r.width });
+      let width = Math.min(r.width, Math.max(220, window.innerWidth - 24));
+      let left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
+      setPos({ top: r.bottom + 6, left, width });
     }
     place();
     window.addEventListener("resize", place);

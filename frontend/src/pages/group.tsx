@@ -1,0 +1,299 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import '../reset.css';
+import { api } from '../api';
+import type { Group, Project, VarEditing, VarSummary } from '../types';
+import { Sidebar } from '../components/Sidebar';
+import { VariablesTable } from '../components/VariablesTable';
+import { VariableModal } from '../components/VariableModal';
+import SettingsModal from '../components/SettingsModal';
+import { Menu, Plus, Settings as Gear, CheckCircle, RefreshCcw } from 'lucide-react';
+
+function cls(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(' '); }
+
+function parseGroupId(): number | null {
+  const m = window.location.pathname.match(/\/group\/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+function GroupPage() {
+  const groupId = parseGroupId();
+
+  const [tokenInfo, setTokenInfo] = useState<string>('');
+  const [tokenOk, setTokenOk] = useState<boolean>(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
+  const projectsReqRef = useRef(0);
+
+  const [vars, setVars] = useState<VarSummary[]>([]);
+  const [varsLoading, setVarsLoading] = useState(false);
+  const [varsError, setVarsError] = useState<string | null>(null);
+  const [canCreate, setCanCreate] = useState<boolean>(false);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
+
+  useEffect(() => {
+    (async () => {
+      const h = await api.health();
+      setTokenOk(!!h?.ok);
+      setTokenInfo(h?.user?.name || h?.user?.username || '');
+      const cfg = await api.uiConfig();
+      setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
+      setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
+      const g = await api.groups();
+      setGroups(g);
+      if (groupId) {
+        setProjectsLoading(true);
+        const reqId = ++projectsReqRef.current;
+        const list = await api.projects(groupId, projectSearch);
+        if (reqId === projectsReqRef.current) {
+          setProjects(list);
+          setProjectsLoading(false);
+        }
+        await loadVars(groupId);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled || !groupId) return;
+    const t = setInterval(() => loadVars(groupId, true), Math.max(1, autoRefreshSec) * 1000);
+    return () => clearInterval(t);
+  }, [autoRefreshEnabled, autoRefreshSec, groupId]);
+
+  async function loadVars(id: number, silent = false) {
+    setVarsLoading(!silent);
+    setCanCreate(false);
+    try {
+      const v = await api.vars({ kind: 'group', id });
+      setVars(v);
+      setVarsError(null);
+      setCanCreate(true);
+    } catch (e: any) {
+      const status: number = e?.status ?? 0;
+      if (status === 403) {
+        setVars([]); setVarsError('Нет доступа к переменным для выбранной группы.');
+      } else if (status === 404) {
+        setVars([]); setVarsError('Группа не найдена.');
+      } else {
+        setVars([]); setVarsError('Не удалось загрузить переменные.');
+      }
+    } finally {
+      setVarsLoading(false);
+    }
+  }
+
+  async function openCreate() {
+    if (!groupId) return;
+    const empty: VarEditing = { key: '', variable_type: 'file', environment_scope: '*', protected: false, masked: false, raw: false, value: '' } as any;
+    setModalInitial(empty);
+    setModalOpen(true);
+    setModalError(null);
+  }
+
+  async function openEdit(v: VarSummary) {
+    if (!groupId) return;
+    try {
+      const full = await api.varGet({ kind: 'group', id: groupId }, v.key, v.environment_scope || '*');
+      const vt = (full.variable_type === 'env_var') ? 'variables' : (full.variable_type || 'file');
+      const edit: VarEditing = { ...full, variable_type: vt as any, __originalKey: full.key, __originalEnv: full.environment_scope || '*' };
+      setModalInitial(edit);
+      setModalOpen(true);
+      setModalError(null);
+    } catch {
+      await loadVars(groupId);
+    }
+  }
+
+  async function saveEditing(draft: VarEditing) {
+    if (!groupId) return;
+    const backendType = (draft.variable_type === 'variables') ? 'env_var' : (draft.variable_type || 'file');
+    const payload: any = {
+      key: draft.key.trim(),
+      variable_type: backendType,
+      environment_scope: draft.environment_scope?.trim() || '*',
+      protected: !!draft.protected,
+      masked: !!draft.masked || !!(draft as any).hidden,
+      raw: !!draft.raw,
+      value: draft.value ?? '',
+    };
+    if ((draft as any).hidden) payload.masked_and_hidden = true;
+    if ((draft as any).__originalKey) {
+      payload.original_key = (draft as any).__originalKey;
+      payload.original_environment_scope = (draft as any).__originalEnv || '*';
+    }
+    try {
+      setModalError(null);
+      await api.upsert({ kind: 'group', id: groupId }, payload);
+      await loadVars(groupId);
+      setModalOpen(false);
+    } catch (e: any) {
+      let friendly = e?.message || 'Не удалось сохранить переменную';
+      if (e?.status === 400) {
+        const d = e?.json?.detail || e?.json; const valErr = d?.message?.value;
+        if (Array.isArray(valErr) && valErr[0] && (modalInitial?.masked || (modalInitial as any)?.hidden)) {
+          friendly = 'Значение для маскированной переменной не соответствует требованиям GitLab. Используйте не менее 8 символов и допустимые символы.';
+        }
+      }
+      setModalError(friendly); throw e;
+    }
+  }
+
+  const handleSettingsSave = (refreshSec: number) => { setAutoRefreshSec(refreshSec); };
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // best-effort group name for title (не подставляем id, чтобы избежать мигания)
+  const groupName = (groups.find(g => g.id === groupId)?.full_path) || '';
+
+  return (
+    <div className="min-h-screen text-slate-900">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+        <div className="max-w-[1400px] mx-auto px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3 flex-wrap">
+          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
+            <Menu size={18} />
+          </button>
+          <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GitLab: CI/CD Variables</a>
+          <div className="ml-auto flex items-center gap-2">
+            {/* Mobile: icon only */}
+            <span
+              className={("inline-flex sm:hidden items-center justify-center w-8 h-8 rounded-full border ") + (tokenOk ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-rose-100 border-rose-200 text-rose-700")}
+              title={tokenOk ? 'GitLab: подключено' : 'GitLab: нет подключения'}
+            >
+              <CheckCircle size={16} />
+            </span>
+            {/* Desktop/Tablet: full pill with text */}
+            <span
+              className={("hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm select-none ") + (tokenOk ? "bg-emerald-100 border-emerald-200 text-emerald-800" : "bg-rose-100 border-rose-200 text-rose-800")}
+              title={tokenOk ? 'GitLab: подключено' : 'GitLab: нет подключения'}
+            >
+              <CheckCircle size={16} />
+              {tokenOk ? ("Token OK" + (tokenInfo ? ": " + tokenInfo : "")) : "Token Error"}
+            </span>
+            <button
+              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!groupId || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              onClick={() => { if (groupId) loadVars(groupId); }}
+              disabled={!groupId || varsLoading}
+              title="Обновить переменные"
+            >
+              <RefreshCcw size={16} /> <span className="hidden sm:inline">Обновить</span>
+            </button>
+            <button
+              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!groupId || !canCreate || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              onClick={openCreate}
+              disabled={!groupId || !canCreate || varsLoading}
+              title={!groupId ? 'Выберите группу' : (varsLoading ? 'Загрузка данных…' : (!canCreate ? 'Нет прав на редактирование переменных этой группы' : 'Создать переменную'))}
+            >
+              <Plus size={16} /> <span className="hidden sm:inline">Создать</span>
+            </button>
+            <button className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm" onClick={() => setSettingsOpen(true)} title="Открыть настройки автообновления">
+              <Gear size={16} /> <span className="hidden sm:inline">Настройки</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-[1400px] mx-auto flex px-2 sm:px-4 overflow-x-hidden w-full">
+        <div className="hidden lg:block">
+          <Sidebar
+            groups={groups}
+            groupSearch={groupSearch}
+            onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
+            onPickGroup={async (g) => {
+              if (g.id === groupId) {
+                // Текущая группа — просто подгрузим проекты без навигации
+                setProjects([]);
+                setProjectsLoading(true);
+                const reqId = ++projectsReqRef.current;
+                const list = await api.projects(g.id, projectSearch);
+                if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+              } else {
+                window.location.href = `/group/${g.id}`;
+              }
+            }}
+            projects={projects}
+            projectsLoading={projectsLoading}
+            projectSearch={projectSearch}
+            onProjectSearchChange={async (q) => {
+              setProjectSearch(q);
+              if (!groupId) { setProjects([]); return; }
+              setProjectsLoading(true);
+              const reqId = ++projectsReqRef.current;
+              const list = await api.projects(groupId as any, q);
+              if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+            }}
+            onPickProject={(p) => { window.location.href = `/project/${p.id}`; }}
+            selectedProjectId={null}
+            currentGroupName={groupName}
+            initialOpenGroupId={groupId}
+          />
+        </div>
+
+        {sidebarOpen && (
+          <div className="lg:hidden fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 mx-2 w-[calc(100vw-16px)] max-w-[420px] bg-white border border-slate-200 p-2 rounded-2xl shadow-lg overflow-y-auto overflow-x-hidden">
+              <Sidebar
+                groups={groups}
+                groupSearch={groupSearch}
+                onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
+                onPickGroup={async (g) => {
+                  if (g.id === groupId) {
+                    setProjects([]);
+                    setProjectsLoading(true);
+                    const reqId = ++projectsReqRef.current;
+                    const list = await api.projects(g.id, projectSearch);
+                    if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                    setSidebarOpen(false);
+                  } else {
+                    setSidebarOpen(false);
+                    window.location.href = `/group/${g.id}`;
+                  }
+                }}
+                projects={projects}
+                projectsLoading={projectsLoading}
+                projectSearch={projectSearch}
+                onProjectSearchChange={async (q) => {
+                  setProjectSearch(q);
+                  if (!groupId) { setProjects([]); return; }
+                  setProjectsLoading(true);
+                  const reqId = ++projectsReqRef.current;
+                  const list = await api.projects(groupId as any, q);
+                  if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                }}
+                onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}
+                selectedProjectId={null}
+                currentGroupName={groupName}
+                initialOpenGroupId={groupId}
+              />
+            </div>
+          </div>
+        )}
+
+        <VariablesTable
+          vars={vars}
+          loading={varsLoading}
+          error={varsError}
+          onEdit={openEdit}
+          hasContext={!!groupId}
+          titleText={groupId ? `Группа: ${groupName}` : 'Выберите контекст'}
+        />
+      </main>
+
+      <VariableModal open={modalOpen} onClose={() => setModalOpen(false)} initial={modalInitial} envOptions={[]} onSave={saveEditing} error={modalError || undefined} />
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={refresh => setAutoRefreshSec(refresh)} currentValue={autoRefreshSec} />
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')!).render(<GroupPage />);
