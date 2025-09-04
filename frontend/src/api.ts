@@ -24,6 +24,10 @@ export const api = {
     const r = await fetch("/api/ui-config");
     return check<UIConfig>(r);
   },
+  async stats() {
+    const r = await fetch("/api/stats");
+    return check<{ groups_count: number; projects_count: number; projects_sample: Project[] }>(r);
+  },
   async groups(search = "") {
     const r = await fetch("/api/groups" + (search ? `?search=${encodeURIComponent(search)}` : ""));
     return check<Group[]>(r);

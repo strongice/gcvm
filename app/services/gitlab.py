@@ -38,7 +38,11 @@ class GitLabClient:
     async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("HTTP %s %s", method, url)
-        r = await self.http.request(method, url, headers=HEADERS, **kwargs)
+        try:
+            r = await self.http.request(method, url, headers=HEADERS, **kwargs)
+        except httpx.ReadTimeout as e:
+            logger.warning("HTTP %s %s -> timeout", method, url)
+            raise HTTPException(504, "GitLab API timed out") from e
         # Нормализуем redirect на абсолютный external_url (типа http://localhost)
         if 300 <= r.status_code < 400:
             loc = r.headers.get("location")
@@ -71,7 +75,9 @@ class GitLabClient:
 
     async def _paginated_get(self, url: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         params = dict(params or {})
-        params.setdefault("per_page", settings.GITLAB_PER_PAGE)
+        # Ограничим размер страницы разумным пределом, чтобы не получать гигантские ответы
+        per_page_cfg = int(params.get("per_page", settings.GITLAB_PER_PAGE)) if params.get("per_page") else settings.GITLAB_PER_PAGE
+        params["per_page"] = max(1, min(int(per_page_cfg or 100), 200))
         page = 1
         acc: List[Dict[str, Any]] = []
         while True:
@@ -88,6 +94,19 @@ class GitLabClient:
                 break
             page = int(next_page)
         return acc
+
+    # lightweight counts without fetching all pages
+    async def _count(self, url: str, params: Dict[str, Any]) -> int:
+        p = dict(params)
+        p["per_page"] = 1
+        p["page"] = 1
+        r = await self._request("GET", url, params=p, timeout=settings.REQUEST_TIMEOUT_S)
+        self._raise_for_status(r)
+        total = r.headers.get("X-Total") or r.headers.get("X-Total-Pages")
+        try:
+            return int(total) if total is not None else max(0, len(r.json()) if isinstance(r.json(), list) else 0)
+        except Exception:
+            return max(0, len(r.json()) if isinstance(r.json(), list) else 0)
 
     # ---------- meta ----------
     async def get_user(self) -> Dict[str, Any]:
@@ -110,6 +129,13 @@ class GitLabClient:
             {"id": g["id"], "name": g.get("name") or g.get("path"), "full_path": g.get("full_path")}
             for g in items
         ]
+
+    async def count_groups(self) -> int:
+        params: Dict[str, Any] = {
+            "membership": True,
+            "include_subgroups": True,
+        }
+        return await self._count("/groups", params)
 
     # list_top_groups / list_subgroups — удалены (откат варианта A)
 
@@ -140,6 +166,52 @@ class GitLabClient:
                 params["search"] = search
             items = await self._paginated_get("/projects", params)
 
+        out: List[Dict[str, Any]] = []
+        for p in items:
+            ns = (p.get("namespace", {}) or {})
+            out.append(
+                {
+                    "id": p["id"],
+                    "name": p.get("name") or p.get("path"),
+                    "path_with_namespace": p.get("path_with_namespace"),
+                    "namespace_id": ns.get("id"),
+                    "namespace_full_path": ns.get("full_path"),
+                }
+            )
+        return out
+
+    async def count_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> int:
+        if group_id:
+            params: Dict[str, Any] = {
+                "with_shared": True,
+                "min_access_level": settings.GITLAB_MIN_ACCESS_LEVEL,
+            }
+            if search:
+                params["search"] = search
+            return await self._count(f"/groups/{group_id}/projects", params)
+        else:
+            params = {
+                "membership": True,
+                "simple": True,
+                "min_access_level": settings.GITLAB_MIN_ACCESS_LEVEL,
+            }
+            if search:
+                params["search"] = search
+            return await self._count("/projects", params)
+
+    async def sample_projects(self, limit: int = 6) -> List[Dict[str, Any]]:
+        params = {
+            "membership": True,
+            "simple": True,
+            "order_by": "path",
+            "sort": "asc",
+            "min_access_level": settings.GITLAB_MIN_ACCESS_LEVEL,
+            "per_page": max(1, min(int(limit or 6), 50)),
+            "page": 1,
+        }
+        r = await self._request("GET", "/projects", params=params, timeout=settings.REQUEST_TIMEOUT_S)
+        self._raise_for_status(r)
+        items = r.json() or []
         out: List[Dict[str, Any]] = []
         for p in items:
             ns = (p.get("namespace", {}) or {})

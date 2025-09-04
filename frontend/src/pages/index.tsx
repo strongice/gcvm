@@ -33,7 +33,11 @@ function IndexPage() {
       setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
       const g = await api.groups();
       setGroups(g);
-      try { const all = await api.projects(null as any, ''); setCounts({ groups: g.length, projects: all.length }); setProjects(all.slice(0, 6)); } catch {}
+      try {
+        const s = await api.stats();
+        setCounts({ groups: s.groups_count || g.length, projects: s.projects_count || 0 });
+        setProjects((s.projects_sample || []).slice(0, 6));
+      } catch {}
     })();
   }, []);
 

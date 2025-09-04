@@ -68,6 +68,19 @@ async def ui_config():
     }
 
 
+@app.get("/api/stats", tags=["meta"])
+async def api_stats():
+    gl = app.state.gitlab
+    groups_count = await gl.count_groups()
+    projects_count = await gl.count_projects()
+    projects_sample = await gl.sample_projects(limit=6)
+    return {
+        "groups_count": groups_count,
+        "projects_count": projects_count,
+        "projects_sample": projects_sample,
+    }
+
+
 # Static frontend (Vite build, MPA)
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
