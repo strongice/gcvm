@@ -161,11 +161,17 @@ class GitLabClient:
         return out
 
     async def count_groups(self) -> int:
+        ck = ("count_groups",)
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return int(cached)
         params: Dict[str, Any] = {
             "membership": True,
             "include_subgroups": True,
         }
-        return await self._count("/groups", params)
+        total = await self._count("/groups", params)
+        self._cache_set(ck, int(total))
+        return total
 
     # list_top_groups / list_subgroups — удалены (откат варианта A)
 
@@ -249,6 +255,10 @@ class GitLabClient:
         return out
 
     async def count_projects(self, group_id: Optional[int] = None, search: Optional[str] = None) -> int:
+        ck = ("count_projects", group_id or 0, search or "")
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return int(cached)
         if group_id:
             params: Dict[str, Any] = {
                 "with_shared": True,
@@ -256,7 +266,9 @@ class GitLabClient:
             }
             if search:
                 params["search"] = search
-            return await self._count(f"/groups/{group_id}/projects", params)
+            total = await self._count(f"/groups/{group_id}/projects", params)
+            self._cache_set(ck, int(total))
+            return total
         else:
             params = {
                 "membership": True,
@@ -265,9 +277,15 @@ class GitLabClient:
             }
             if search:
                 params["search"] = search
-            return await self._count("/projects", params)
+            total = await self._count("/projects", params)
+            self._cache_set(ck, int(total))
+            return total
 
     async def sample_projects(self, limit: int = 6) -> List[Dict[str, Any]]:
+        ck = ("sample_projects", int(limit or 6))
+        cached = self._cache_get(ck)
+        if cached is not None:
+            return cached
         params = {
             "membership": True,
             "simple": True,
@@ -292,6 +310,7 @@ class GitLabClient:
                     "namespace_full_path": ns.get("full_path"),
                 }
             )
+        self._cache_set(ck, out)
         return out
 
     async def get_project(self, project_id: int) -> Dict[str, Any]:

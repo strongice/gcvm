@@ -104,7 +104,7 @@ function IndexPage() {
           <Sidebar
             groups={groups}
             groupSearch={groupSearch}
-            onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
+            onGroupSearchChange={async (q) => { setGroupSearch(q); const g = await api.groups(q); setGroups(g); }}
             onPickGroup={(g) => { window.location.href = `/group/${g.id}`; }}
             projects={projects}
             projectsLoading={projectsLoading}
@@ -136,7 +136,7 @@ function IndexPage() {
             <Sidebar
               groups={groups}
               groupSearch={groupSearch}
-              onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
+              onGroupSearchChange={async (q) => { setGroupSearch(q); const g = await api.groups(q); setGroups(g); }}
               onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; }}
               projects={projects}
               projectsLoading={projectsLoading}

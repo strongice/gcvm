@@ -13,15 +13,12 @@ logger = logging.getLogger(__name__)
 class UpsertVarPayload(BaseModel):
     key: str
     value: str
-    variable_type: Optional[str] = None  # 'env_var' | 'file'
+    variable_type: Optional[str] = None
     environment_scope: Optional[str] = "*"
     protected: bool = False
     masked: bool = False
     raw: bool = False
-    # GitLab 17.4+: создание скрытой переменной
     masked_and_hidden: Optional[bool] = None
-
-    # для переименования/смены scope
     original_key: Optional[str] = None
     original_environment_scope: Optional[str] = None
 
@@ -39,10 +36,6 @@ async def list_projects(
 
 @router.get("/{project_id}")
 async def project_get(request: Request, project_id: int) -> Dict[str, Any]:
-    """Эндпоинт для восстановления контекста проекта на фронтенде.
-
-    Логируем обращение и отдадим минимальный набор полей, которых достаточно UI.
-    """
     gl = request.app.state.gitlab
     logger.info("project_get: requested project_id=%s", project_id)
     try:
@@ -89,7 +82,6 @@ async def project_bundle(request: Request, project_id: int) -> Dict[str, Any]:
 async def project_variable_upsert(request: Request, project_id: int, payload: UpsertVarPayload) -> Dict[str, Any]:
     gl = request.app.state.gitlab
     data = payload.model_dump()
-    # Безопасный лог (без value)
     safe = {
         "key": data.get("key"),
         "value_len": (len(data.get("value") or "")),

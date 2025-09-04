@@ -8,6 +8,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.core.config import settings
 from app.services.gitlab import GitLabClient
@@ -15,20 +16,51 @@ from app.services.gitlab import GitLabClient
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    limits = httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60.0)
     http_client = httpx.AsyncClient(
         base_url=settings.GITLAB_BASE_URL,
         follow_redirects=False,
         trust_env=False,
+        http2=True,
+        limits=limits,
     )
     app.state.http_client = http_client
     app.state.gitlab = GitLabClient(http_client)
     try:
+        # warm caches in background (non-blocking)
+        import asyncio
+        async def _warm():
+            gl = app.state.gitlab
+            try:
+                await gl.count_groups()
+            except Exception:
+                pass
+            try:
+                await gl.count_projects()
+            except Exception:
+                pass
+            try:
+                await gl.sample_projects(limit=6)
+            except Exception:
+                pass
+            # Optional warm caches for lists (bounded to reduce load)
+            try:
+                await gl.list_groups()
+            except Exception:
+                pass
+            try:
+                # Preload up to 200 membership projects (first pages)
+                await gl.list_projects(group_id=None, search=None, limit=200)
+            except Exception:
+                pass
+        asyncio.create_task(_warm())
         yield
     finally:
         await http_client.aclose()
 
 
-app = FastAPI(title="GitLab File Variables WebUI", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="GitLab File Variables WebUI", version="0.5.0", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS не используется: фронтенд и бэкенд обслуживаются с одного origin
 
@@ -71,9 +103,11 @@ async def ui_config():
 @app.get("/api/stats", tags=["meta"])
 async def api_stats():
     gl = app.state.gitlab
-    groups_count = await gl.count_groups()
-    projects_count = await gl.count_projects()
-    projects_sample = await gl.sample_projects(limit=6)
+    from asyncio import gather
+    groups_count_f = gl.count_groups()
+    projects_count_f = gl.count_projects()
+    projects_sample_f = gl.sample_projects(limit=6)
+    groups_count, projects_count, projects_sample = await gather(groups_count_f, projects_count_f, projects_sample_f)
     return {
         "groups_count": groups_count,
         "projects_count": projects_count,
