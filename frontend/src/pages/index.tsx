@@ -73,7 +73,7 @@ function IndexPage() {
           <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" aria-label="Открыть меню" title="Открыть меню навигации" onClick={() => setSidebarOpen(true)}>
             <Menu size={18} />
           </button>
-          <span className="text-[15px] font-semibold tracking-wide">GitLab: CI/CD Variables</span>
+          <span className="text-[15px] font-semibold tracking-wide">GCVM - Gitlab CI\CD Variables Manager</span>
           <div className="ml-auto flex items-center gap-2">
             <button
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"

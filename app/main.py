@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import logging
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.gzip import GZipMiddleware
@@ -120,6 +120,24 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
+    # Cache policy middleware for frontend assets and pages
+    @app.middleware("http")
+    async def _cache_headers(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        try:
+            if path.startswith("/assets/"):
+                # Long cache for fingerprinted assets
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif path == "/" or path.startswith("/group/") or path.startswith("/project/"):
+                # HTML pages should always revalidate to pick up new asset hashes
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+        except Exception:
+            pass
+        return response
+
     # Root page
     @app.get("/", include_in_schema=False)
     async def root_index():

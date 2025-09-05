@@ -13,8 +13,11 @@ export function Welcome(props: {
     <section className="flex-1 p-3">
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200">
-          <div className="text-2xl font-semibold mb-1">Добро пожаловать в Variables Manager</div>
-          <div className="text-slate-600 text-sm">Выберите группу и проект слева, чтобы управлять CI/CD переменными. Пока ничего не выбрано — это стартовая страница.</div>
+          <div className="text-2xl font-semibold mb-1">GCVM - Gitlab CI\CD Variables Manager</div>
+          <div className="text-slate-600 text-sm">
+            GCVM — приложение для удобного управления переменными CI/CD в GitLab: находите группы и проекты,
+            просматривайте и редактируйте переменные, создавайте новые и настраивайте их параметры — всё в одном интерфейсе.
+          </div>
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -36,10 +39,7 @@ export function Welcome(props: {
           </div>
         </div>
 
-        {/* Блок "Недавние проекты" удалён по требованию. Подсказку оставим для навигации. */}
-        <div className="px-6 pb-6">
-          <div className="text-xs text-slate-500">Подсказка: используйте поиск по группам и проектам в левой панели.</div>
-        </div>
+        {/* Подсказка удалена по требованию */}
       </div>
     </section>
   );

@@ -180,7 +180,7 @@ function ProjectPage() {
           <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
             <Menu size={18} />
           </button>
-          <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GitLab: CI/CD Variables</a>
+          <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GCVM - Gitlab CI\CD Variables Manager</a>
           <div className="ml-auto flex items-center gap-2">
             <button
               className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!projectId || varsLoading) && 'opacity-60 cursor-not-allowed')}

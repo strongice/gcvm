@@ -155,12 +155,20 @@ export function Sidebar(props: {
                 <div key={g.id} id={`sb-group-${g.id}`} className="rounded-2xl border border-slate-200 overflow-hidden">
                   <button
                     onClick={async () => {
+                      // If page is going to navigate (e.g., index), avoid any local UI changes
+                      if (!expandOnGroupClick) {
+                        rememberScroll();
+                        try { await onPickGroup(g); } catch {}
+                        return;
+                      }
+                      const res = await onPickGroup(g);
+                      if (res === false) { // explicit navigation signal
+                        rememberScroll();
+                        return;
+                      }
                       try { sessionStorage.setItem('ui_sidebar_anchor_gid', String(g.id)); } catch {}
                       rememberScroll();
-                      const res = await onPickGroup(g);
-                      if (expandOnGroupClick && res !== false) {
-                        setOpenGroupId(opened ? null : g.id);
-                      }
+                      setOpenGroupId(opened ? null : g.id);
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-white"
                     title={g.full_path}
