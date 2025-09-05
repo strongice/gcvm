@@ -212,10 +212,14 @@ function GroupPage() {
                 setProjects([]);
                 setProjectsLoading(true);
                 const reqId = ++projectsReqRef.current;
-                const list = await api.projects(g.id, projectSearch);
-                if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                // Возвращаем управление немедленно, чтобы аккордеон раскрылся сразу
+                api.projects(g.id, projectSearch).then((list) => {
+                  if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                });
+                return true; // остаёмся на странице — можно разворачивать
               } else {
                 window.location.href = `/group/${g.id}`;
+                return false; // будет навигация — не разворачивать во избежание мерцания
               }
             }}
             projects={projects}
@@ -252,12 +256,15 @@ function GroupPage() {
                     setProjects([]);
                     setProjectsLoading(true);
                     const reqId = ++projectsReqRef.current;
-                    const list = await api.projects(g.id, projectSearch);
-                    if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                    api.projects(g.id, projectSearch).then((list) => {
+                      if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+                    });
                     setSidebarOpen(false);
+                    return true;
                   } else {
                     setSidebarOpen(false);
                     window.location.href = `/group/${g.id}`;
+                    return false;
                   }
                 }}
                 projects={projects}

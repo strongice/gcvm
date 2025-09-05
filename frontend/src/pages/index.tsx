@@ -111,7 +111,8 @@ function IndexPage() {
             groups={groups}
             groupSearch={groupSearch}
             onGroupSearchChange={async (q) => { setGroupSearch(q); const g = await api.groups(q); setGroups(g); }}
-            onPickGroup={(g) => { window.location.href = `/group/${g.id}`; }}
+            onPickGroup={(g) => { window.location.href = `/group/${g.id}`; return false; }}
+            expandOnGroupClick={false}
             projects={projects}
             projectsLoading={projectsLoading}
             projectSearch={projectSearch}
@@ -143,7 +144,8 @@ function IndexPage() {
               groups={groups}
               groupSearch={groupSearch}
               onGroupSearchChange={async (q) => { setGroupSearch(q); const g = await api.groups(q); setGroups(g); }}
-              onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; }}
+              onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; return false; }}
+              expandOnGroupClick={false}
               projects={projects}
               projectsLoading={projectsLoading}
               projectSearch={projectSearch}

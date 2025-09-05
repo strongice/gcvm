@@ -10,7 +10,7 @@ export function Sidebar(props: {
   groups: Group[];
   groupSearch: string;
   onGroupSearchChange: (q: string) => void;
-  onPickGroup: (g: Group) => void;
+  onPickGroup: (g: Group) => void | boolean | Promise<void | boolean>;
 
   projects: Project[];
   projectsLoading?: boolean;
@@ -21,6 +21,9 @@ export function Sidebar(props: {
   selectedProjectId: number | null;
   currentGroupName?: string;
   initialOpenGroupId?: number | null;
+  // When true (default), clicking a group toggles accordion open locally.
+  // Set to false on pages that navigate immediately (e.g., index) to avoid a brief flicker before navigation.
+  expandOnGroupClick?: boolean;
 }) {
   const {
     groups,
@@ -34,6 +37,7 @@ export function Sidebar(props: {
     onPickProject,
     selectedProjectId,
     initialOpenGroupId,
+    expandOnGroupClick = true,
   } = props;
 
   const [openGroupId, setOpenGroupId] = useState<number | null>(initialOpenGroupId ?? null);
@@ -149,10 +153,14 @@ export function Sidebar(props: {
               const opened = openGroupId === g.id;
               return (
                 <div key={g.id} id={`sb-group-${g.id}`} className="rounded-2xl border border-slate-200 overflow-hidden">
-              <button
+                  <button
                     onClick={async () => {
                       try { sessionStorage.setItem('ui_sidebar_anchor_gid', String(g.id)); } catch {}
-                      rememberScroll(); setOpenGroupId(opened ? null : g.id); await onPickGroup(g);
+                      rememberScroll();
+                      const res = await onPickGroup(g);
+                      if (expandOnGroupClick && res !== false) {
+                        setOpenGroupId(opened ? null : g.id);
+                      }
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-white"
                     title={g.full_path}

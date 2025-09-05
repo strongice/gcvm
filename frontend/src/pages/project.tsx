@@ -221,7 +221,7 @@ function ProjectPage() {
             groups={groups}
             groupSearch={groupSearch}
             onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
-            onPickGroup={(g) => { window.location.href = `/group/${g.id}`; }}
+            onPickGroup={(g) => { window.location.href = `/group/${g.id}`; return false; }}
             projects={projects}
             projectsLoading={projectsLoading}
             projectSearch={projectSearch}
@@ -248,7 +248,7 @@ function ProjectPage() {
                 groups={groups}
                 groupSearch={groupSearch}
                 onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
-                onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; }}
+                onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; return false; }}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 projectSearch={projectSearch}
