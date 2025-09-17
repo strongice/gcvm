@@ -2,11 +2,16 @@ services:
   web:
     build: .
     image: strongice/gitlab-variables-webui:latest
-    container_name: gitlab-ui
     env_file:
       - .env
     ports:
       - "80:8017"
+    networks:
+      - gcvm
     dns:
       - 8.8.8.8
       - 1.1.1.1
+
+networks:
+  gcvm:
+    name: gcvm
