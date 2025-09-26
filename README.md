@@ -1,6 +1,6 @@
 # GCVM — GitLab CI/CD Variables Manager
 
-_Russian:_ [jump to the Russian version](#ru)
+**Russian:** [jump to the Russian version](#ru)
 
 ---
 
@@ -25,7 +25,7 @@ Sample `.env`:
 # GitLab API base URL — must end with /api/v4
 GITLAB_BASE_URL=https://gitlab.example.com/api/v4
 
-# Personal Access Token (scope: api)
+# Personal Access Token (scope: api\repo)
 GITLAB_TOKEN=glpat-XXXXXXXXXXXXXXXXXXXXXXXX
 
 # App log level: DEBUG / INFO / WARNING / ERROR
@@ -67,7 +67,7 @@ Then open: `http://localhost/`
 <a id="ru"></a>
 ## 🇷🇺 Описание
 
-_English:_ [jump to the English version](#en)
+English: [jump to the English version](#en)
 
 **GCVM** — это веб-приложение на FastAPI для просмотра и редактирования CI/CD-переменных GitLab: искать, просматривать, создавать, обновлять значения как в **проектах**, так и в **группах**. Поддерживаются оба типа переменных — обычные переменные окружения и переменные-файлы.
 
@@ -87,7 +87,7 @@ _English:_ [jump to the English version](#en)
 # Базовый URL GitLab API — обязательно заканчивается на /api/v4
 GITLAB_BASE_URL=https://gitlab.example.com/api/v4
 
-# Персональный токен (область: api)
+# Персональный токен (область: api\repo)
 GITLAB_TOKEN=glpat-XXXXXXXXXXXXXXXXXXXXXXXX
 
 # Логи приложения: DEBUG / INFO / WARNING / ERROR
