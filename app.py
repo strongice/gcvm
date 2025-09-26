@@ -17,7 +17,7 @@ def main() -> None:
     load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8017"))
+    port = int(os.getenv("PORT", "8080"))
     reload_enabled = os.getenv("RELOAD", "true").lower() in ("1", "true", "yes", "on")
     # uvicorn ожидает нижний регистр: debug/info/warning/error/critical/trace
     log_level = (os.getenv("LOG_LEVEL", "info") or "info").lower()

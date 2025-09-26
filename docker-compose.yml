@@ -1,16 +1,12 @@
 services:
   web:
-    build: .
-    image: strongice/gitlab-variables-webui:latest
+    image: strongice/gcvm:0.1
     env_file:
       - .env
     ports:
-      - "80:8017"
+      - "80:8080"
     networks:
       - gcvm
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
 
 networks:
   gcvm:
