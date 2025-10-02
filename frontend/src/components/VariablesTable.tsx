@@ -14,9 +14,14 @@ export function VariablesTable(props: {
   onEdit: (v: VarSummary) => void;
   hasContext: boolean;
   titleText: string;
+  visibleCount: number;
+  onShowAll?: () => void;
 }) {
-  const { vars, loading, error, onEdit, hasContext, titleText } = props;
+  const { vars, loading, error, onEdit, hasContext, titleText, visibleCount, onShowAll } = props;
   const { t } = useI18n();
+  const effectiveCount = Number.isFinite(visibleCount) ? Math.max(visibleCount, 0) : 0;
+  const visibleItems = vars.slice(0, effectiveCount);
+  const canShowMore = Boolean(!loading && !error && onShowAll && vars.length > visibleItems.length);
 
   return (
     <section className="flex-1 p-4">
@@ -54,14 +59,14 @@ export function VariablesTable(props: {
                     {error}
                   </td>
                 </tr>
-              ) : vars.length === 0 ? (
+              ) : visibleItems.length === 0 ? (
                 <tr>
                   <td className="py-8 text-center text-slate-500" colSpan={7}>
                     {hasContext ? t("var.table.none") : t("var.table.no_context")}
                   </td>
                 </tr>
               ) : (
-                vars.map((v, index) => {
+                visibleItems.map((v, index) => {
                   const expand = !(v.raw === true);
                   return (
                     <tr
@@ -129,6 +134,17 @@ export function VariablesTable(props: {
             </tbody>
           </table>
         </div>
+        {canShowMore && (
+          <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-center">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+              onClick={onShowAll}
+            >
+              {t('var.table.show_all')}
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

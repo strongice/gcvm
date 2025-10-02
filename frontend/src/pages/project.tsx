@@ -18,10 +18,16 @@ function parseProjectId(): number | null {
 }
 
 const PROJECTS_PAGE_SIZE = 3;
+const DEFAULT_VARS_VISIBLE = 6;
 
 function ProjectPage() {
   const { t } = useI18n();
   const projectId = parseProjectId();
+  const navigationEntry = (typeof performance !== 'undefined' && 'getEntriesByType' in performance)
+    ? (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
+    : undefined;
+  const isReloadNavigation = navigationEntry?.type === 'reload'
+    || (typeof performance !== 'undefined' && (performance as any)?.navigation?.type === 1);
 
   const initialHint = React.useMemo<{ name?: string; namespace_id?: number } | null>(() => {
     try {
@@ -49,6 +55,8 @@ function ProjectPage() {
   const [varsLoading, setVarsLoading] = useState(false);
   const [varsError, setVarsError] = useState<string | null>(null);
   const [canCreate, setCanCreate] = useState<boolean | null>(null);
+  const [varsVisibleCount, setVarsVisibleCount] = useState<number>(DEFAULT_VARS_VISIBLE);
+  const [varsShowAll, setVarsShowAll] = useState<boolean>(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
@@ -71,6 +79,39 @@ function ProjectPage() {
   const fetchAllProjects = React.useCallback((gid: number, search: string) => {
     return api.projects(gid, search.trim() || "");
   }, []);
+
+  const showAllStorageKey = projectId ? `ui_project_vars_show_all_${projectId}` : null;
+
+  useEffect(() => {
+    if (projectId) {
+      if (isReloadNavigation) {
+        try {
+          const stored = showAllStorageKey ? sessionStorage.getItem(showAllStorageKey) : null;
+          const shouldShowAll = stored === '1';
+          setVarsShowAll(shouldShowAll);
+        } catch {
+          setVarsShowAll(false);
+        }
+      } else {
+        setVarsShowAll(false);
+      }
+      setVarsVisibleCount(DEFAULT_VARS_VISIBLE);
+    } else {
+      setVarsShowAll(false);
+      setVarsVisibleCount(0);
+    }
+  }, [projectId, showAllStorageKey, isReloadNavigation]);
+
+  useEffect(() => {
+    if (!showAllStorageKey) return;
+    try {
+      if (varsShowAll) {
+        sessionStorage.setItem(showAllStorageKey, '1');
+      } else {
+        sessionStorage.removeItem(showAllStorageKey);
+      }
+    } catch {}
+  }, [showAllStorageKey, varsShowAll]);
 
   useEffect(() => {
     return () => {
@@ -126,13 +167,15 @@ function ProjectPage() {
           if (gid) {
             setParentGroupId((prev) => (prev ?? gid));
           }
-          setVars(bundle.variables || []);
+          const varsData = bundle.variables || [];
+          setVars(varsData);
           setVarsError(null);
           setCanCreate(true);
+          setVarsVisibleCount(varsData.length ? Math.min(DEFAULT_VARS_VISIBLE, varsData.length) : 0);
           setEnvOptions(bundle.environments || []);
         } catch {
           if (cancelled) return;
-          await loadVars(projectId, { resetAvailability: true });
+          await loadVars(projectId, { resetAvailability: true, resetVisible: true });
           if (cancelled) return;
           try {
             const envs = await api.projectEnvs(projectId);
@@ -149,24 +192,42 @@ function ProjectPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    const t = setInterval(() => loadVars(projectId, { silent: true }), 5000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => loadVars(projectId, { silent: true, resetVisible: false }), 5000);
+    return () => clearInterval(timer);
   }, [projectId]);
 
   async function loadVars(
     id: number,
-    options: { silent?: boolean; resetAvailability?: boolean } = {},
+    options: { silent?: boolean; resetAvailability?: boolean; resetVisible?: boolean } = {},
   ) {
-    const { silent = false, resetAvailability = false } = options;
+    const { silent = false, resetAvailability = false, resetVisible = false } = options;
     setVarsLoading(!silent);
     if (resetAvailability) {
       setCanCreate(null);
     }
+    const prevVisible = varsVisibleCount;
+    const prevTotal = vars.length;
     try {
       const v = await api.vars({ kind: 'project', id });
       setVars(v);
       setVarsError(null);
       setCanCreate(true);
+      setVarsVisibleCount(() => {
+        if (v.length === 0) {
+          return 0;
+        }
+        if (varsShowAll || (prevVisible >= prevTotal && prevTotal > 0)) {
+          return v.length;
+        }
+        if (resetVisible) {
+          return Math.min(DEFAULT_VARS_VISIBLE, v.length);
+        }
+        const prevEffective = prevVisible && prevVisible > 0 ? prevVisible : Math.min(DEFAULT_VARS_VISIBLE, v.length);
+        if (prevEffective >= v.length) {
+          return v.length;
+        }
+        return Math.min(prevEffective, v.length);
+      });
     } catch (e: any) {
       const status: number = e?.status ?? 0;
       if (status === 403) {
@@ -180,10 +241,16 @@ function ProjectPage() {
         setVarsError(t('app.error.generic'));
       }
       setCanCreate(false);
+      setVarsVisibleCount(0);
     } finally {
       setVarsLoading(false);
     }
   }
+
+  const handleShowAllVars = () => {
+    setVarsShowAll(true);
+    setVarsVisibleCount(vars.length);
+  };
 
   async function openCreate() {
     if (!projectId) return;
@@ -342,6 +409,8 @@ function ProjectPage() {
           onEdit={openEdit}
           hasContext={!!projectId}
           titleText={projectId ? `${t('sidebar.projects')}: ${projectName || ''}` : t('app.select.context')}
+          visibleCount={varsShowAll ? vars.length : varsVisibleCount}
+          onShowAll={varsShowAll ? undefined : handleShowAllVars}
         />
       </main>
 
