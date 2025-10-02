@@ -1,6 +1,6 @@
 services:
   web:
-    image: strongice/gcvm:v0.1.0
+    image: strongice/gcvm:latest
     container_name: gcvm
     env_file:
       - .env
