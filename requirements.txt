@@ -1,5 +1,6 @@
 fastapi
-uvicorn
 httpx[http2]==0.27.2
-python-dotenv
+prometheus_client==0.20.0
 pydantic-settings
+python-dotenv
+uvicorn

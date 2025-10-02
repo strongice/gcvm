@@ -1,4 +1,14 @@
-import type { ApiError, Group, Health, Project, UIConfig, VarDetail, VarSummary } from "./types";
+import type {
+  ApiError,
+  GroupPageResponse,
+  GroupTreeNode,
+  GroupTreeResponse,
+  Health,
+  Project,
+  ProjectListPage,
+  VarDetail,
+  VarSummary,
+} from "./types";
 
 function fetchNoStore(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input as any, { ...(init || {}), cache: 'no-store' });
@@ -24,17 +34,59 @@ export const api = {
     const r = await fetchNoStore("/api/health");
     return check<Health>(r);
   },
-  async uiConfig() {
-    const r = await fetchNoStore("/api/ui-config");
-    return check<UIConfig>(r);
-  },
   async stats() {
     const r = await fetchNoStore("/api/stats");
     return check<{ groups_count: number; projects_count: number; projects_sample: Project[] }>(r);
   },
-  async groups(search = "") {
-    const r = await fetchNoStore("/api/groups" + (search ? `?search=${encodeURIComponent(search)}` : ""));
-    return check<Group[]>(r);
+  async groups(params: { search?: string; hash?: string; since?: string } = {}) {
+    const { search = "", hash, since } = params;
+    const headers: Record<string, string> = {};
+    if (since) headers["If-Modified-Since"] = since;
+    if (hash) headers["X-Tree-Hash"] = hash;
+    const url = "/api/groups" + (search ? `?search=${encodeURIComponent(search)}` : "");
+    const r = await fetchNoStore(url, { headers });
+    const data = await check<GroupTreeResponse>(r);
+    const lastModifiedHeader = r.headers.get("Last-Modified") || undefined;
+    const hashHeader = r.headers.get("X-Tree-Hash") || undefined;
+    return {
+      ...data,
+      hash: hashHeader || data.hash,
+      last_modified_http: data.last_modified_http || lastModifiedHeader,
+    };
+  },
+  async groupsRootPage(params: { cursor?: string | null; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const url = `/api/groups/root${qs.size ? `?${qs.toString()}` : ""}`;
+    const r = await fetchNoStore(url);
+    const data = await check<GroupPageResponse>(r);
+    const lastModifiedHeader = r.headers.get("Last-Modified") || undefined;
+    const hashHeader = r.headers.get("X-Tree-Hash") || undefined;
+    return {
+      ...data,
+      hash: hashHeader || data.hash,
+      last_modified_http: data.last_modified_http || lastModifiedHeader,
+    } satisfies GroupPageResponse;
+  },
+  async groupChildrenPage(groupId: number, params: { cursor?: string | null; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.cursor) qs.set("cursor", params.cursor);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const url = `/api/groups/${groupId}/children${qs.size ? `?${qs.toString()}` : ""}`;
+    const r = await fetchNoStore(url);
+    const data = await check<GroupPageResponse>(r);
+    const lastModifiedHeader = r.headers.get("Last-Modified") || undefined;
+    const hashHeader = r.headers.get("X-Tree-Hash") || undefined;
+    return {
+      ...data,
+      hash: hashHeader || data.hash,
+      last_modified_http: data.last_modified_http || lastModifiedHeader,
+    } satisfies GroupPageResponse;
+  },
+  async groupPath(groupId: number) {
+    const r = await fetchNoStore(`/api/groups/${groupId}/path`);
+    return check<Array<{ id: number; name?: string; full_path?: string; parent_id?: number | null; children_count?: number }>>(r);
   },
   async projects(group_id: number | null, search = "") {
     const qs = new URLSearchParams();
@@ -82,12 +134,14 @@ export const api = {
     const r = await fetchNoStore(`/api/projects/${project_id}/bundle`);
     return check<{ project: Project; variables: VarSummary[]; environments: string[] }>(r);
   },
-  async projectsLimited(group_id: number, search: string, limit: number) {
+  async projectsPage(params: { groupId: number; search: string; page: number; perPage: number }) {
+    const { groupId, search, page, perPage } = params;
     const qs = new URLSearchParams();
-    if (group_id) qs.set("group_id", String(group_id));
+    if (groupId) qs.set("group_id", String(groupId));
     if (search) qs.set("search", search);
-    if (limit) qs.set("limit", String(limit));
+    qs.set("page", String(page));
+    qs.set("per_page", String(perPage));
     const r = await fetchNoStore("/api/projects?" + qs.toString());
-    return check<Project[]>(r);
+    return check<ProjectListPage>(r);
   }
 };

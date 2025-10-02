@@ -3,11 +3,17 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import logging
 
+from datetime import timezone
+from email.utils import parsedate_to_datetime
+
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 logger = logging.getLogger(__name__)
+
+from app.metrics import GROUP_PAGE_REQUESTS
 
 
 class UpsertVarPayload(BaseModel):
@@ -25,9 +31,77 @@ class UpsertVarPayload(BaseModel):
 
 
 @router.get("")
-async def list_groups(request: Request, search: Optional[str] = Query(default=None)) -> List[Dict[str, Any]]:
+async def list_groups(request: Request, search: Optional[str] = Query(default=None)) -> JSONResponse:
     gl = request.app.state.gitlab
-    return await gl.list_groups(search)
+    since_header = request.headers.get("if-modified-since")
+    known_hash = request.headers.get("x-tree-hash")
+    since_ts: Optional[float] = None
+    if since_header:
+        try:
+            dt = parsedate_to_datetime(since_header)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            since_ts = dt.timestamp()
+        except Exception:
+            since_ts = None
+
+    result = await gl.list_groups(search=search, since_ts=since_ts, known_hash=known_hash)
+    headers = _tree_headers(result)
+
+    payload = dict(result)
+    payload.pop("last_modified_http", None)
+    return JSONResponse(content=payload, headers=headers)
+
+
+def _tree_headers(payload: Dict[str, Any]) -> Dict[str, str]:
+    headers: Dict[str, str] = {}
+    last_modified_http = payload.get("last_modified_http")
+    if last_modified_http:
+        headers["Last-Modified"] = last_modified_http
+    if payload.get("hash"):
+        headers["X-Tree-Hash"] = payload["hash"]
+    return headers
+
+
+@router.get("/root")
+async def list_root_groups_page(
+    request: Request,
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> JSONResponse:
+    gl = request.app.state.gitlab
+    try:
+        payload = await gl.list_groups_page(parent_id=None, cursor=cursor, limit=limit)
+    except Exception:
+        GROUP_PAGE_REQUESTS.labels(endpoint="root", result="error").inc()
+        raise
+    GROUP_PAGE_REQUESTS.labels(endpoint="root", result="ok").inc()
+    headers = _tree_headers(payload)
+    return JSONResponse(content=payload, headers=headers)
+
+
+@router.get("/{group_id}/children")
+async def list_group_children_page(
+    request: Request,
+    group_id: int,
+    cursor: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> JSONResponse:
+    gl = request.app.state.gitlab
+    try:
+        payload = await gl.list_groups_page(parent_id=group_id, cursor=cursor, limit=limit)
+    except Exception:
+        GROUP_PAGE_REQUESTS.labels(endpoint="children", result="error").inc()
+        raise
+    GROUP_PAGE_REQUESTS.labels(endpoint="children", result="ok").inc()
+    headers = _tree_headers(payload)
+    return JSONResponse(content=payload, headers=headers)
+
+
+@router.get("/{group_id}/path")
+async def group_path(request: Request, group_id: int) -> List[Dict[str, Any]]:
+    gl = request.app.state.gitlab
+    return await gl.get_group_path(group_id)
 
 
 @router.get("/{group_id}/variables")

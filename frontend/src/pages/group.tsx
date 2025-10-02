@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../reset.css';
 import { api } from '../api';
-import type { Group, Project, VarEditing, VarSummary } from '../types';
+import type { VarEditing, VarSummary } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { VariablesTable } from '../components/VariablesTable';
 import { VariableModal } from '../components/VariableModal';
 import SettingsModal from '../components/SettingsModal';
 import { Menu, Plus, Settings as Gear, RefreshCcw } from 'lucide-react';
+import { I18nProvider, useI18n } from '../i18n/context';
 
 function cls(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(' '); }
 
@@ -16,65 +17,100 @@ function parseGroupId(): number | null {
   return m ? Number(m[1]) : null;
 }
 
+function lastSegment(fullPath?: string | null): string {
+  if (!fullPath) return '';
+  const parts = fullPath.split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : fullPath;
+}
+
+const PROJECTS_PAGE_SIZE = 3;
+
 function GroupPage() {
+  const { t } = useI18n();
   const groupId = parseGroupId();
 
   const [tokenOk, setTokenOk] = useState<boolean>(false);
   const [healthReady, setHealthReady] = useState<boolean>(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupSearch, setGroupSearch] = useState('');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectSearch, setProjectSearch] = useState('');
-  const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
-  const projectsReqRef = useRef(0);
 
   const [vars, setVars] = useState<VarSummary[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
   const [varsError, setVarsError] = useState<string | null>(null);
-  const [canCreate, setCanCreate] = useState<boolean>(false);
+  const [canCreate, setCanCreate] = useState<boolean | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
+  const [groupName, setGroupName] = useState('');
+
+  const fetchProjects = React.useCallback((gid: number, search: string, page: number) => {
+    return api.projectsPage({
+      groupId: gid,
+      search: search.trim(),
+      page,
+      perPage: PROJECTS_PAGE_SIZE,
+    });
+  }, []);
+
+  const fetchAllProjects = React.useCallback((gid: number, search: string) => {
+    return api.projects(gid, search.trim() || "");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try {
+        const reason = sessionStorage.getItem('ui_projects_leave_reason');
+        const keepGroup = sessionStorage.getItem('ui_projects_keep_group');
+        const shouldKeep = reason === 'project' && keepGroup && Number(keepGroup) === groupId;
+        if (!shouldKeep) {
+          sessionStorage.removeItem('ui_project_list_pref_v1');
+          sessionStorage.removeItem('ui_projects_keep_group');
+        }
+        if (reason !== 'project') {
+          sessionStorage.removeItem('ui_projects_keep_group');
+        }
+        sessionStorage.removeItem('ui_projects_leave_reason');
+      } catch {}
+    };
+  }, [groupId]);
 
   useEffect(() => {
     (async () => {
       try {
         const h = await api.health();
         setTokenOk(!!h?.ok);
-      } catch { setTokenOk(false); } finally { setHealthReady(true); }
-      const cfg = await api.uiConfig();
-      setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
-      setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
-      const g = await api.groups();
-      setGroups(g);
+      } catch {
+        setTokenOk(false);
+      } finally {
+        setHealthReady(true);
+      }
+
       if (groupId) {
-        setProjectsLoading(true);
-        const reqId = ++projectsReqRef.current;
-        const list = await api.projectsLimited(groupId, projectSearch, projectSearch ? 0 as any : 50);
-        if (reqId === projectsReqRef.current) {
-          setProjects(list);
-          setProjectsLoading(false);
-        }
-        await loadVars(groupId);
+        await loadVars(groupId, { resetAvailability: true });
+      } else {
+        setVars([]);
+        setVarsError(null);
+        setCanCreate(null);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
   useEffect(() => {
-    if (!autoRefreshEnabled || !groupId) return;
-    const t = setInterval(() => loadVars(groupId, true), Math.max(1, autoRefreshSec) * 1000);
+    if (!groupId) return;
+    const t = setInterval(() => loadVars(groupId, { silent: true }), 5000);
     return () => clearInterval(t);
-  }, [autoRefreshEnabled, autoRefreshSec, groupId]);
+  }, [groupId]);
 
-  async function loadVars(id: number, silent = false) {
+  async function loadVars(
+    id: number,
+    options: { silent?: boolean; resetAvailability?: boolean } = {},
+  ) {
+    const { silent = false, resetAvailability = false } = options;
     setVarsLoading(!silent);
-    setCanCreate(false);
+    if (resetAvailability) {
+      setCanCreate(null);
+    }
     try {
       const v = await api.vars({ kind: 'group', id });
       setVars(v);
@@ -83,12 +119,13 @@ function GroupPage() {
     } catch (e: any) {
       const status: number = e?.status ?? 0;
       if (status === 403) {
-        setVars([]); setVarsError('Нет доступа к переменным для выбранной группы.');
+        setVars([]); setVarsError(t('app.error.group.forbidden'));
       } else if (status === 404) {
-        setVars([]); setVarsError('Группа не найдена.');
+        setVars([]); setVarsError(t('app.error.group.notfound'));
       } else {
-        setVars([]); setVarsError('Не удалось загрузить переменные.');
+        setVars([]); setVarsError(t('app.error.generic'));
       }
+      setCanCreate(false);
     } finally {
       setVarsLoading(false);
     }
@@ -139,51 +176,84 @@ function GroupPage() {
       await loadVars(groupId);
       setModalOpen(false);
     } catch (e: any) {
-      let friendly = e?.message || 'Не удалось сохранить переменную';
+      let friendly = e?.message || t('modal.variable.error.save');
       if (e?.status === 400) {
         const d = e?.json?.detail || e?.json; const valErr = d?.message?.value;
         if (Array.isArray(valErr) && valErr[0] && (modalInitial?.masked || (modalInitial as any)?.hidden)) {
-          friendly = 'Значение для маскированной переменной не соответствует требованиям GitLab. Используйте не менее 8 символов и допустимые символы.';
+          friendly = t('modal.variable.masked.hint');
         }
       }
       setModalError(friendly); throw e;
     }
   }
 
-  const handleSettingsSave = (refreshSec: number) => { setAutoRefreshSec(refreshSec); };
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // best-effort group name for title (не подставляем id, чтобы избежать мигания)
-  const groupName = (groups.find(g => g.id === groupId)?.full_path) || '';
+  useEffect(() => {
+    if (!groupId) {
+      setGroupName('');
+      return;
+    }
+    let cancelled = false;
+    api.groupPath(groupId)
+      .then((path) => {
+        if (cancelled) return;
+        const entry = path[path.length - 1];
+        setGroupName(entry?.name || lastSegment(entry?.full_path) || '');
+      })
+      .catch(() => {
+        if (!cancelled) setGroupName('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   return (
-    <div className="min-h-screen text-slate-900">
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3 flex-wrap">
-          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-50 text-slate-900">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 flex-wrap">
+          <button
+            className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200"
+            onClick={() => setSidebarOpen(true)}
+            aria-label={t('app.menu.open')}
+            title={t('app.menu.open')}
+          >
             <Menu size={18} />
           </button>
-          <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GCVM - Gitlab CI\CD Variables Manager</a>
+          <a
+            className="text-[16px] font-semibold tracking-wide text-slate-800"
+            href="/"
+            title={t('app.title')}
+          >
+            {t('app.title')}
+          </a>
           <div className="ml-auto flex items-center gap-2">
             <button
-              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!groupId || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-transparent bg-blue-600 hover:bg-blue-700 text-white text-sm shadow-sm', (!groupId || varsLoading) && 'opacity-60 cursor-not-allowed')}
               onClick={() => { if (groupId) loadVars(groupId); }}
               disabled={!groupId || varsLoading}
-              title="Обновить переменные"
+              title={t('app.refresh.title')}
             >
-              <RefreshCcw size={16} /> <span className="hidden sm:inline">Обновить</span>
+              <RefreshCcw size={16} /> <span className="hidden sm:inline">{t('app.refresh')}</span>
             </button>
             <button
-              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!groupId || !canCreate || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              className={cls(
+                'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 text-sm text-blue-700 transition-opacity',
+                (!groupId || canCreate === false) && 'opacity-60 cursor-not-allowed'
+              )}
               onClick={openCreate}
-              disabled={!groupId || !canCreate || varsLoading}
-              title={!groupId ? 'Выберите группу' : (varsLoading ? 'Загрузка данных…' : (!canCreate ? 'Нет прав на редактирование переменных этой группы' : 'Создать переменную'))}
+              disabled={!groupId || canCreate === false}
+              title={!groupId
+                ? t('app.select.group')
+                : (canCreate === false
+                    ? t('app.error.group.forbidden')
+                    : (canCreate === null ? t('settings.language.auto_hint') : t('action.create')))}
             >
-              <Plus size={16} /> <span className="hidden sm:inline">Создать</span>
+              <Plus size={16} /> <span className="hidden sm:inline">{t('action.create')}</span>
             </button>
-            <button className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm" onClick={() => setSettingsOpen(true)} title="Открыть настройки автообновления">
-              <Gear size={16} /> <span className="hidden sm:inline">Настройки</span>
+            <button className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm" onClick={() => setSettingsOpen(true)} title={t('action.settings')}>
+              <Gear size={16} /> <span className="hidden sm:inline">{t('action.settings')}</span>
             </button>
           </div>
         </div>
@@ -193,53 +263,32 @@ function GroupPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative z-10 max-w-md w-full rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 p-6 text-center shadow-2xl">
-            <div className="text-lg font-semibold mb-1">Нет подключения к GitLab</div>
-            <div className="text-sm mb-4">Проверьте указанные настройки и соединение с сетью.</div>
-            <button className="px-3 py-1.5 rounded-full border border-rose-300 bg-white hover:bg-rose-50 text-sm" onClick={() => window.location.reload()}>Повторить попытку</button>
+            <div className="text-lg font-semibold mb-1">{t('app.connection.lost')}</div>
+            <div className="text-sm mb-4">{t('app.connection.tip')}</div>
+            <button className="px-3 py-1.5 rounded-full border border-rose-300 bg-white hover:bg-rose-50 text-sm" onClick={() => window.location.reload()}>{t('app.retry')}</button>
           </div>
         </div>
       )}
 
-      <main className="max-w-[1400px] mx-auto flex px-2 sm:px-4 overflow-x-hidden w-full">
+      <main className="max-w-[1600px] mx-auto flex px-3 sm:px-6 pb-8 pt-6 gap-4 overflow-x-hidden w-full">
         <div className="hidden lg:block">
           <Sidebar
-            groups={groups}
-            groupSearch={groupSearch}
-            onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
             onPickGroup={async (g) => {
               if (g.id === groupId) {
-                // Текущая группа — просто подгрузим проекты без навигации
-                setProjects([]);
-                setProjectsLoading(true);
-                const reqId = ++projectsReqRef.current;
-                // Возвращаем управление немедленно, чтобы аккордеон раскрылся сразу
-                api.projects(g.id, projectSearch).then((list) => {
-                  if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-                });
-                return true; // остаёмся на странице — можно разворачивать
-              } else {
-                window.location.href = `/group/${g.id}`;
-                return false; // будет навигация — не разворачивать во избежание мерцания
+                return true;
               }
-            }}
-            projects={projects}
-            projectsLoading={projectsLoading}
-            projectSearch={projectSearch}
-            onProjectSearchChange={async (q) => {
-              setProjectSearch(q);
-              if (!groupId) { setProjects([]); return; }
-              setProjectsLoading(true);
-              const reqId = ++projectsReqRef.current;
-              const list = await api.projectsLimited(groupId as any, q, q ? 0 as any : 50);
-              if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+              window.location.href = `/group/${g.id}`;
+              return false;
             }}
             onPickProject={(p) => {
               try { sessionStorage.setItem('ui_proj_hint', JSON.stringify(p)); } catch {}
               window.location.href = `/project/${p.id}`;
             }}
+            fetchProjects={fetchProjects}
+            fetchAllProjects={fetchAllProjects}
+            selectedGroupId={groupId ?? null}
             selectedProjectId={null}
-            currentGroupName={groupName}
-            initialOpenGroupId={groupId}
+            onResetGroups={() => { window.location.href = '/'; }}
           />
         </div>
 
@@ -247,42 +296,23 @@ function GroupPage() {
           <div className="lg:hidden fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
             <div className="absolute left-0 top-0 bottom-0 mx-2 w-[calc(100vw-16px)] max-w-[420px] bg-white border border-slate-200 p-2 rounded-2xl shadow-lg overflow-y-auto overflow-x-hidden">
-              <Sidebar
-                groups={groups}
-                groupSearch={groupSearch}
-                onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
-                onPickGroup={async (g) => {
-                  if (g.id === groupId) {
-                    setProjects([]);
-                    setProjectsLoading(true);
-                    const reqId = ++projectsReqRef.current;
-                    api.projects(g.id, projectSearch).then((list) => {
-                      if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-                    });
-                    setSidebarOpen(false);
-                    return true;
-                  } else {
-                    setSidebarOpen(false);
-                    window.location.href = `/group/${g.id}`;
-                    return false;
-                  }
-                }}
-                projects={projects}
-                projectsLoading={projectsLoading}
-                projectSearch={projectSearch}
-                onProjectSearchChange={async (q) => {
-                  setProjectSearch(q);
-                  if (!groupId) { setProjects([]); return; }
-                  setProjectsLoading(true);
-                  const reqId = ++projectsReqRef.current;
-                  const list = await api.projectsLimited(groupId as any, q, q ? 0 as any : 50);
-                  if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-                }}
-                onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}
-                selectedProjectId={null}
-                currentGroupName={groupName}
-                initialOpenGroupId={groupId}
-              />
+            <Sidebar
+              onPickGroup={async (g) => {
+                if (g.id === groupId) {
+                  setSidebarOpen(false);
+                  return true;
+                }
+                setSidebarOpen(false);
+                window.location.href = `/group/${g.id}`;
+                return false;
+              }}
+              onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}
+              fetchProjects={fetchProjects}
+              fetchAllProjects={fetchAllProjects}
+              selectedGroupId={groupId ?? null}
+              selectedProjectId={null}
+              onResetGroups={() => { setSidebarOpen(false); window.location.href = '/'; }}
+            />
             </div>
           </div>
         )}
@@ -293,14 +323,18 @@ function GroupPage() {
           error={varsError}
           onEdit={openEdit}
           hasContext={!!groupId}
-          titleText={groupId ? `Группа: ${groupName}` : 'Выберите контекст'}
+          titleText={groupId ? `${t('sidebar.groups')}: ${groupName}` : t('app.select.context')}
         />
       </main>
 
       <VariableModal open={modalOpen} onClose={() => setModalOpen(false)} initial={modalInitial} envOptions={[]} onSave={saveEditing} error={modalError || undefined} />
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={refresh => setAutoRefreshSec(refresh)} currentValue={autoRefreshSec} />
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
 
-createRoot(document.getElementById('root')!).render(<GroupPage />);
+createRoot(document.getElementById('root')!).render(
+  <I18nProvider>
+    <GroupPage />
+  </I18nProvider>
+);
