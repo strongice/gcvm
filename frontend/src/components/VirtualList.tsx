@@ -24,7 +24,7 @@ type VirtualListProps<T> = {
 export function VirtualList<T>(props: VirtualListProps<T>) {
   const {
     items,
-    rowHeight,
+    rowHeight: estimatedRowHeight,
     overscan = 4,
     scrollRef,
     className,
@@ -34,6 +34,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   } = props;
 
   const listRef = React.useRef<HTMLDivElement | null>(null);
+  const [rowHeight, setRowHeight] = React.useState(estimatedRowHeight);
   const [range, setRange] = React.useState({ start: 0, end: Math.min(items.length, overscan * 2) });
 
   const recompute = React.useCallback(() => {
@@ -52,6 +53,10 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     const end = Math.min(items.length, Math.ceil((scroll + viewport) / rowHeight) + overscan);
     setRange({ start, end });
   }, [items.length, overscan, rowHeight, scrollRef]);
+
+  React.useEffect(() => {
+    setRowHeight(estimatedRowHeight);
+  }, [estimatedRowHeight]);
 
   React.useEffect(() => {
     setRange((prev) => {
@@ -82,6 +87,26 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     return () => observer.disconnect();
   }, [recompute]);
 
+  React.useEffect(() => {
+    recompute();
+  }, [rowHeight, recompute]);
+
+  React.useLayoutEffect(() => {
+    const listEl = listRef.current;
+    if (!listEl) return;
+    const children = Array.from(listEl.children) as HTMLElement[];
+    const rowEl = children.find((child) => child.dataset.virtualPad !== 'top' && child.dataset.virtualPad !== 'bottom');
+    if (!rowEl) return;
+    const rect = rowEl.getBoundingClientRect();
+    const style = window.getComputedStyle(rowEl);
+    const marginTop = Number.parseFloat(style.marginTop || '0');
+    const marginBottom = Number.parseFloat(style.marginBottom || '0');
+    const total = rect.height + marginTop + marginBottom;
+    if (total > 0 && Math.abs(total - rowHeight) > 1) {
+      setRowHeight(total);
+    }
+  }, [items.length, range.start, range.end, rowHeight]);
+
   if (items.length === 0) {
     return <div className={className} style={style} ref={listRef}>{emptyPlaceholder}</div>;
   }
@@ -92,10 +117,17 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
 
   return (
     <div ref={listRef} className={className} style={style}>
-      <div style={{ height: topPad }} />
-      {slice.map((item, idx) => renderItem(item, range.start + idx))}
-      <div style={{ height: bottomPad }} />
+      <div data-virtual-pad="top" style={{ height: topPad, flexShrink: 0 }} />
+      {slice.map((item, idx) => {
+        const child = renderItem(item, range.start + idx);
+        const key = React.isValidElement(child) && child.key != null ? child.key : range.start + idx;
+        return (
+          <div key={key as React.Key} data-virtual-row>
+            {child}
+          </div>
+        );
+      })}
+      <div data-virtual-pad="bottom" style={{ height: bottomPad, flexShrink: 0 }} />
     </div>
   );
 }
-
