@@ -29,8 +29,20 @@ async def list_projects(
     group_id: Optional[int] = Query(default=None),
     search: Optional[str] = Query(default=None),
     limit: Optional[int] = Query(default=None, ge=1, le=1000),
-) -> List[Dict[str, Any]]:
+    page: Optional[int] = Query(default=None, ge=1),
+    per_page: Optional[int] = Query(default=None, ge=1, le=200),
+) -> Any:
     gl = request.app.state.gitlab
+    lazy_mode = page is not None or per_page is not None
+    if lazy_mode:
+        payload = await gl.list_projects(
+            group_id=group_id,
+            search=search,
+            page=page,
+            per_page=per_page,
+            lazy=True,
+        )
+        return payload
     return await gl.list_projects(group_id=group_id, search=search, limit=limit)
 
 

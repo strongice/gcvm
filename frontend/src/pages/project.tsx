@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../reset.css';
 import { api } from '../api';
-import type { Group, Project, VarEditing, VarSummary } from '../types';
+import type { VarEditing, VarSummary } from '../types';
 import { Sidebar } from '../components/Sidebar';
 import { VariablesTable } from '../components/VariablesTable';
 import { VariableModal } from '../components/VariableModal';
 import SettingsModal from '../components/SettingsModal';
 import { Menu, Plus, Settings as Gear, RefreshCcw } from 'lucide-react';
+import { I18nProvider, useI18n } from '../i18n/context';
 
 function cls(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(' '); }
 
@@ -16,24 +17,38 @@ function parseProjectId(): number | null {
   return m ? Number(m[1]) : null;
 }
 
+const PROJECTS_PAGE_SIZE = 3;
+
 function ProjectPage() {
+  const { t } = useI18n();
   const projectId = parseProjectId();
+
+  const initialHint = React.useMemo<{ name?: string; namespace_id?: number } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('ui_proj_hint');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const [tokenOk, setTokenOk] = useState<boolean>(false);
   const [healthReady, setHealthReady] = useState<boolean>(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupSearch, setGroupSearch] = useState('');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectSearch, setProjectSearch] = useState('');
-  const [projectsLoading, setProjectsLoading] = useState<boolean>(false);
-  const projectsReqRef = useRef(0);
-  const [parentGroupId, setParentGroupId] = useState<number | null>(null);
-  const [parentGroupName, setParentGroupName] = useState<string | undefined>(undefined);
+  const [parentGroupId, setParentGroupId] = useState<number | null>(() => {
+    if (initialHint?.namespace_id) return Number(initialHint.namespace_id) || null;
+    try {
+      const raw = sessionStorage.getItem('ui_projects_keep_group');
+      const parsed = raw ? Number(raw) : NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
 
   const [vars, setVars] = useState<VarSummary[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
   const [varsError, setVarsError] = useState<string | null>(null);
-  const [canCreate, setCanCreate] = useState<boolean>(false);
+  const [canCreate, setCanCreate] = useState<boolean | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalInitial, setModalInitial] = useState<VarEditing | null>(null);
@@ -41,84 +56,133 @@ function ProjectPage() {
   const [envOptions, setEnvOptions] = useState<string[]>([]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [autoRefreshSec, setAutoRefreshSec] = useState<number>(15);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
 
-  const [projectName, setProjectName] = useState<string>('');
+  const [projectName, setProjectName] = useState<string>(() => initialHint?.name || '');
+
+  const fetchProjects = React.useCallback((gid: number, search: string, page: number) => {
+    return api.projectsPage({
+      groupId: gid,
+      search: search.trim(),
+      page,
+      perPage: PROJECTS_PAGE_SIZE,
+    });
+  }, []);
+
+  const fetchAllProjects = React.useCallback((gid: number, search: string) => {
+    return api.projects(gid, search.trim() || "");
+  }, []);
 
   useEffect(() => {
+    return () => {
+      try {
+        const returnFlag = sessionStorage.getItem('ui_projects_return_to_group') === '1';
+        if (!returnFlag) {
+          sessionStorage.removeItem('ui_project_list_pref_v1');
+          sessionStorage.removeItem('ui_projects_keep_group');
+        } else {
+          sessionStorage.removeItem('ui_projects_keep_group');
+        }
+        sessionStorage.removeItem('ui_projects_return_to_group');
+        sessionStorage.removeItem('ui_projects_leave_reason');
+      } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
         const h = await api.health();
-        setTokenOk(!!h?.ok);
-      } catch { setTokenOk(false); } finally { setHealthReady(true); }
-      const cfg = await api.uiConfig();
-      setAutoRefreshEnabled(!!cfg?.auto_refresh_enabled);
-      setAutoRefreshSec(Number(cfg?.auto_refresh_sec || 15));
+        if (!cancelled) setTokenOk(!!h?.ok);
+      } catch {
+        if (!cancelled) setTokenOk(false);
+      } finally {
+        if (!cancelled) setHealthReady(true);
+      }
 
-      // use hint from previous page if available
-      try {
-        const raw = sessionStorage.getItem('ui_proj_hint');
-        if (raw) {
-          const hint = JSON.parse(raw);
-          if (hint?.name) setProjectName(hint.name);
-          if (hint?.namespace_id) setParentGroupId(hint.namespace_id);
-          if (hint?.namespace_full_path) setParentGroupName(hint.namespace_full_path);
-          sessionStorage.removeItem('ui_proj_hint');
+      if (initialHint) {
+        if (initialHint.name) {
+          setProjectName((prev) => prev || initialHint.name || '');
         }
-      } catch {}
-
-      // Load groups in background (for sidebar names)
-      api.groups().then(setGroups).catch(()=>{});
+        if (initialHint.namespace_id !== undefined && initialHint.namespace_id !== null) {
+          const normalized = Number(initialHint.namespace_id);
+          if (Number.isFinite(normalized)) {
+            setParentGroupId((prev) => (prev ?? normalized));
+          }
+        }
+        try {
+          sessionStorage.removeItem('ui_proj_hint');
+        } catch {}
+      }
 
       if (projectId) {
-        // one combined backend call for project + variables + envs
         try {
           const bundle = await api.projectBundle(projectId);
+          if (cancelled) return;
           const proj = bundle.project;
-          if (!projectName) setProjectName(proj?.name || proj?.path_with_namespace || '');
+          setProjectName((prev) => prev || proj?.name || proj?.path_with_namespace || '');
           const gid = proj?.namespace_id || null;
-          if (gid && !parentGroupId) setParentGroupId(gid);
-          if (!parentGroupName && proj?.namespace_full_path) setParentGroupName(proj.namespace_full_path);
+          if (gid) {
+            setParentGroupId((prev) => (prev ?? gid));
+          }
           setVars(bundle.variables || []);
           setVarsError(null);
           setCanCreate(true);
           setEnvOptions(bundle.environments || []);
-          // ensure sidebar has an initial project list for parent group
-          if (gid) {
-            setProjectsLoading(true);
-            const reqId = ++projectsReqRef.current;
-            const list = await api.projectsLimited(gid, '', 50);
-            if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-          }
-        } catch (e: any) {
-          // fallback to individual calls if bundle fails
-          await loadVars(projectId);
-          setEnvOptions(await api.projectEnvs(projectId));
+        } catch {
+          if (cancelled) return;
+          await loadVars(projectId, { resetAvailability: true });
+          if (cancelled) return;
+          try {
+            const envs = await api.projectEnvs(projectId);
+            if (!cancelled) setEnvOptions(envs);
+          } catch {}
         }
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, initialHint]);
 
   useEffect(() => {
-    if (!autoRefreshEnabled || !projectId) return;
-    const t = setInterval(() => loadVars(projectId, true), Math.max(1, autoRefreshSec) * 1000);
+    if (!projectId) return;
+    const t = setInterval(() => loadVars(projectId, { silent: true }), 5000);
     return () => clearInterval(t);
-  }, [autoRefreshEnabled, autoRefreshSec, projectId]);
+  }, [projectId]);
 
-  async function loadVars(id: number, silent = false) {
+  async function loadVars(
+    id: number,
+    options: { silent?: boolean; resetAvailability?: boolean } = {},
+  ) {
+    const { silent = false, resetAvailability = false } = options;
     setVarsLoading(!silent);
-    setCanCreate(false);
+    if (resetAvailability) {
+      setCanCreate(null);
+    }
     try {
       const v = await api.vars({ kind: 'project', id });
-      setVars(v); setVarsError(null); setCanCreate(true);
+      setVars(v);
+      setVarsError(null);
+      setCanCreate(true);
     } catch (e: any) {
       const status: number = e?.status ?? 0;
-      if (status === 403) { setVars([]); setVarsError('Нет доступа к переменным для проекта.'); }
-      else if (status === 404) { setVars([]); setVarsError('Проект не найден.'); }
-      else { setVars([]); setVarsError('Не удалось загрузить переменные.'); }
-    } finally { setVarsLoading(false); }
+      if (status === 403) {
+        setVars([]);
+        setVarsError(t('app.error.project.forbidden'));
+      } else if (status === 404) {
+        setVars([]);
+        setVarsError(t('app.error.project.notfound'));
+      } else {
+        setVars([]);
+        setVarsError(t('app.error.generic'));
+      }
+      setCanCreate(false);
+    } finally {
+      setVarsLoading(false);
+    }
   }
 
   async function openCreate() {
@@ -159,11 +223,11 @@ function ProjectPage() {
       await loadVars(projectId);
       setModalOpen(false);
     } catch (e: any) {
-      let friendly = e?.message || 'Не удалось сохранить переменную';
+      let friendly = e?.message || t('modal.variable.error.save');
       if (e?.status === 400) {
         const d = e?.json?.detail || e?.json; const valErr = d?.message?.value;
         if (Array.isArray(valErr) && valErr[0] && (modalInitial?.masked || (modalInitial as any)?.hidden)) {
-          friendly = 'Значение для маскированной переменной не соответствует требованиям GitLab. Используйте не менее 8 символов и допустимые символы.';
+          friendly = t('modal.variable.masked.hint');
         }
       }
       setModalError(friendly); throw e;
@@ -171,35 +235,52 @@ function ProjectPage() {
   }
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const handleSettingsSave = (refreshSec: number) => { setAutoRefreshSec(refreshSec); };
 
   return (
-    <div className="min-h-screen text-slate-900">
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3 flex-wrap">
-          <button className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200" onClick={() => setSidebarOpen(true)} aria-label="Открыть меню" title="Открыть меню навигации">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-50 text-slate-900">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 flex-wrap">
+          <button
+            className="lg:hidden p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200"
+            onClick={() => setSidebarOpen(true)}
+            aria-label={t('app.menu.open')}
+            title={t('app.menu.open')}
+          >
             <Menu size={18} />
           </button>
-          <a className="text-[15px] font-semibold tracking-wide" href="/" title="На главную">GCVM - Gitlab CI\CD Variables Manager</a>
+          <a
+            className="text-[16px] font-semibold tracking-wide text-slate-800"
+            href="/"
+            title={t('app.title')}
+          >
+            {t('app.title')}
+          </a>
           <div className="ml-auto flex items-center gap-2">
             <button
-              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!projectId || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-transparent bg-blue-600 hover:bg-blue-700 text-white text-sm shadow-sm', (!projectId || varsLoading) && 'opacity-60 cursor-not-allowed')}
               onClick={() => { if (projectId) loadVars(projectId); }}
               disabled={!projectId || varsLoading}
-              title="Обновить переменные"
+              title={t('app.refresh.title')}
             >
-              <RefreshCcw size={16} /> <span className="hidden sm:inline">Обновить</span>
+              <RefreshCcw size={16} /> <span className="hidden sm:inline">{t('app.refresh')}</span>
             </button>
             <button
-              className={cls('inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm', (!projectId || !canCreate || varsLoading) && 'opacity-60 cursor-not-allowed')}
+              className={cls(
+                'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 hover:bg-blue-100 text-sm text-blue-700 transition-opacity',
+                (!projectId || canCreate === false) && 'opacity-60 cursor-not-allowed'
+              )}
               onClick={openCreate}
-              disabled={!projectId || !canCreate || varsLoading}
-              title={!projectId ? 'Выберите проект' : (varsLoading ? 'Загрузка данных…' : (!canCreate ? 'Нет прав на редактирование переменных этого проекта' : 'Создать переменную'))}
+              disabled={!projectId || canCreate === false}
+              title={!projectId
+                ? t('app.select.project')
+                : (canCreate === false
+                    ? t('app.error.project.forbidden')
+                    : (canCreate === null ? t('settings.language.auto_hint') : t('action.create')))}
             >
-              <Plus size={16} /> <span className="hidden sm:inline">Создать</span>
+              <Plus size={16} /> <span className="hidden sm:inline">{t('action.create')}</span>
             </button>
-            <button className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm" onClick={() => setSettingsOpen(true)} title="Открыть настройки автообновления">
-              <Gear size={16} /> <span className="hidden sm:inline">Настройки</span>
+            <button className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm" onClick={() => setSettingsOpen(true)} title={t('action.settings')}>
+              <Gear size={16} /> <span className="hidden sm:inline">{t('action.settings')}</span>
             </button>
           </div>
         </div>
@@ -208,35 +289,27 @@ function ProjectPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative z-10 max-w-md w-full rounded-2xl border border-rose-200 bg-rose-50 text-rose-800 p-6 text-center shadow-2xl">
-            <div className="text-lg font-semibold mb-1">Нет подключения к GitLab</div>
-            <div className="text-sm mb-4">Проверьте указанные настройки и соединение с сетью.</div>
-            <button className="px-3 py-1.5 rounded-full border border-rose-300 bg-white hover:bg-rose-50 text-sm" onClick={() => window.location.reload()}>Повторить попытку</button>
+            <div className="text-lg font-semibold mb-1">{t('app.connection.lost')}</div>
+            <div className="text-sm mb-4">{t('app.connection.tip')}</div>
+            <button className="px-3 py-1.5 rounded-full border border-rose-300 bg-white hover:bg-rose-50 text-sm" onClick={() => window.location.reload()}>{t('app.retry')}</button>
           </div>
         </div>
       )}
 
-      <main className="max-w-[1400px] mx-auto flex px-2 sm:px-4 overflow-x-hidden w-full">
+      <main className="max-w-[1600px] mx-auto flex px-3 sm:px-6 pb-8 pt-6 gap-4 overflow-x-hidden w-full">
         <div className="hidden lg:block">
           <Sidebar
-            groups={groups}
-            groupSearch={groupSearch}
-            onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
             onPickGroup={(g) => { window.location.href = `/group/${g.id}`; return false; }}
-            projects={projects}
-            projectsLoading={projectsLoading}
-            projectSearch={projectSearch}
-            onProjectSearchChange={async (q) => {
-              setProjectSearch(q);
-              if (!parentGroupId) { setProjects([]); return; }
-              setProjectsLoading(true);
-              const reqId = ++projectsReqRef.current;
-              const list = await api.projectsLimited(parentGroupId as any, q, q ? 0 as any : 50);
-              if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
+            onPickProject={async (p) => {
+              if (p.id === projectId) return;
+              try { sessionStorage.setItem('ui_proj_hint', JSON.stringify(p)); } catch {}
+              window.location.href = `/project/${p.id}`;
             }}
-            onPickProject={(p) => { window.location.href = `/project/${p.id}`; }}
-            selectedProjectId={projectId}
-            currentGroupName={parentGroupName}
-            initialOpenGroupId={parentGroupId}
+            fetchProjects={fetchProjects}
+            fetchAllProjects={fetchAllProjects}
+            selectedGroupId={parentGroupId}
+            selectedProjectId={projectId ?? null}
+            onResetGroups={() => { window.location.href = '/'; }}
           />
         </div>
 
@@ -244,27 +317,20 @@ function ProjectPage() {
           <div className="lg:hidden fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
             <div className="absolute left-0 top-0 bottom-0 mx-2 w-[calc(100vw-16px)] max-w-[420px] bg-white border border-slate-200 p-2 rounded-2xl shadow-lg overflow-y-auto overflow-x-hidden">
-              <Sidebar
-                groups={groups}
-                groupSearch={groupSearch}
-                onGroupSearchChange={async (q) => { setGroupSearch(q); setGroups(await api.groups(q)); }}
-                onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; return false; }}
-                projects={projects}
-                projectsLoading={projectsLoading}
-                projectSearch={projectSearch}
-                onProjectSearchChange={async (q) => {
-                  setProjectSearch(q);
-                  if (!parentGroupId) { setProjects([]); return; }
-                  setProjectsLoading(true);
-                  const reqId = ++projectsReqRef.current;
-                  const list = await api.projectsLimited(parentGroupId as any, q, q ? 0 as any : 50);
-                  if (reqId === projectsReqRef.current) { setProjects(list); setProjectsLoading(false); }
-                }}
-                onPickProject={(p) => { setSidebarOpen(false); window.location.href = `/project/${p.id}`; }}
-                selectedProjectId={projectId}
-                currentGroupName={parentGroupName}
-                initialOpenGroupId={parentGroupId}
-              />
+            <Sidebar
+              onPickGroup={(g) => { setSidebarOpen(false); window.location.href = `/group/${g.id}`; return false; }}
+              onPickProject={async (p) => {
+                setSidebarOpen(false);
+                if (p.id === projectId) return;
+                try { sessionStorage.setItem('ui_proj_hint', JSON.stringify(p)); } catch {}
+                window.location.href = `/project/${p.id}`;
+              }}
+              fetchProjects={fetchProjects}
+              fetchAllProjects={fetchAllProjects}
+              selectedGroupId={parentGroupId}
+              selectedProjectId={projectId ?? null}
+              onResetGroups={() => { setSidebarOpen(false); window.location.href = '/'; }}
+            />
             </div>
           </div>
         )}
@@ -275,14 +341,18 @@ function ProjectPage() {
           error={varsError}
           onEdit={openEdit}
           hasContext={!!projectId}
-          titleText={projectId ? `Проект: ${projectName || ''}` : 'Выберите контекст'}
+          titleText={projectId ? `${t('sidebar.projects')}: ${projectName || ''}` : t('app.select.context')}
         />
       </main>
 
       <VariableModal open={modalOpen} onClose={() => setModalOpen(false)} initial={modalInitial} envOptions={envOptions} onSave={saveEditing} error={modalError || undefined} />
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={refresh => setAutoRefreshSec(refresh)} currentValue={autoRefreshSec} />
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
 
-createRoot(document.getElementById('root')!).render(<ProjectPage />);
+createRoot(document.getElementById('root')!).render(
+  <I18nProvider>
+    <ProjectPage />
+  </I18nProvider>
+);

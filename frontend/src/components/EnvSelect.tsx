@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useI18n } from "../i18n/context";
 
 function useOutsideClose(refs: React.RefObject<HTMLElement>[], onClose: () => void) {
   useEffect(() => {
@@ -32,6 +33,7 @@ export function EnvSelect({
   onChange: (v: string) => void;
   options: string[];
 }) {
+  const { t } = useI18n();
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -68,7 +70,7 @@ export function EnvSelect({
     .filter((n) => (q ? n.toLowerCase().includes(q.toLowerCase()) : true))
     .slice(0, 50);
 
-  const display = value === '*' ? 'Все (по умолчанию)' : value;
+  const display = value === '*' ? t('modal.env.all') : value;
 
   return (
     <>
@@ -78,8 +80,8 @@ export function EnvSelect({
           value={display}
           onClick={() => setOpen(true)}
           className="w-[220px] gl-input h-9 leading-9 pr-9 cursor-pointer"
-          placeholder="Все (по умолчанию)"
-          title="Нажмите чтобы выбрать окружение или начните ввод в выпадающем поиске"
+          placeholder={t('modal.env.all')}
+          title={t('modal.env.selectTitle')}
         />
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden>
           <ChevronDown size={16} strokeWidth={2.5} />
@@ -105,13 +107,13 @@ export function EnvSelect({
                     setOpen(false);
                   }
                 }}
-                placeholder="Поиск окружения…"
+                placeholder={t('modal.env.search.placeholder')}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300"
               />
             </div>
             <div className="max-h-[260px] overflow-auto p-1">
               {list.length === 0 ? (
-                <div className="px-3 py-2 text-sm text-slate-500">Ничего не найдено</div>
+                <div className="px-3 py-2 text-sm text-slate-500">{t('modal.env.search.empty')}</div>
               ) : (
                 list.map((n) => (
                   <button
@@ -121,15 +123,15 @@ export function EnvSelect({
                       setOpen(false);
                     }}
                     className={cls("w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50", n === value && "bg-slate-100")}
-                    title={n === '*' ? 'Все (по умолчанию)' : n}
+                    title={n === '*' ? t('modal.env.all') : n}
                   >
-                    {n === '*' ? 'Все (по умолчанию)' : n}
+                    {n === '*' ? t('modal.env.all') : n}
                   </button>
                 ))
               )}
             </div>
             <div className="px-3 py-2 text-xs text-slate-500 border-t border-slate-200">
-              Можно ввести новое окружение, или * для wildcard. Нажмите Enter.
+              {t('modal.env.help')}
             </div>
           </div>
         </div>

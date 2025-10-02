@@ -4,33 +4,39 @@ import pathlib
 from contextlib import asynccontextmanager
 import logging
 
-import httpx
+import asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.gzip import GZipMiddleware
 
+from prometheus_client import make_asgi_app
+
 from app.core.config import settings
+from app.core.http_client import create_gitlab_http_client
 from app.services.gitlab import GitLabClient
+from app.workers.group_tree import run_inline_worker
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    limits = httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60.0)
-    http_client = httpx.AsyncClient(
-        base_url=settings.GITLAB_BASE_URL,
-        follow_redirects=False,
-        trust_env=False,
-        http2=True,
-        limits=limits,
-    )
+    http_client = create_gitlab_http_client()
     app.state.http_client = http_client
     app.state.gitlab = GitLabClient(http_client)
+    worker_task: asyncio.Task | None = None
+    worker_stop_event: asyncio.Event | None = None
     try:
-        # warm caches in background (non-blocking)
-        import asyncio
-        async def _warm():
-            gl = app.state.gitlab
+        gl = app.state.gitlab
+
+        try:
+            await gl.prime_group_tree()
+        except Exception:
+            logger.warning("Startup group tree prime failed", exc_info=True)
+
+        async def _warm_background() -> None:
             try:
                 await gl.count_groups()
             except Exception:
@@ -43,24 +49,39 @@ async def lifespan(app: FastAPI):
                 await gl.sample_projects(limit=6)
             except Exception:
                 pass
-            # Optional warm caches for lists (bounded to reduce load)
             try:
-                await gl.list_groups()
-            except Exception:
-                pass
-            try:
-                # Preload up to 200 membership projects (first pages)
                 await gl.list_projects(group_id=None, search=None, limit=200)
             except Exception:
                 pass
-        asyncio.create_task(_warm())
+
+        asyncio.create_task(_warm_background())
+
+        if settings.GROUP_TREE_WORKER_INLINE:
+            worker_stop_event = asyncio.Event()
+            worker_task = asyncio.create_task(
+                run_inline_worker(
+                    app.state.gitlab,
+                    settings.GROUP_TREE_WORKER_INTERVAL_S,
+                    worker_stop_event,
+                    run_immediately=False,
+                )
+            )
+
         yield
     finally:
+        if worker_task and worker_stop_event:
+            worker_stop_event.set()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
         await http_client.aclose()
 
 
 app = FastAPI(title="GitLab File Variables WebUI", version="0.5.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+app.mount("/metrics", make_asgi_app())
 
 # CORS не используется: фронтенд и бэкенд обслуживаются с одного origin
 
@@ -89,14 +110,6 @@ async def api_health():
         "ok": True,
         "user": {"id": u.get("id"), "username": u.get("username"), "name": u.get("name")},
         "base_url": settings.GITLAB_BASE_URL,
-    }
-
-
-@app.get("/api/ui-config", tags=["meta"])
-async def ui_config():
-    return {
-        "auto_refresh_enabled": settings.UI_AUTO_REFRESH_ENABLED,
-        "auto_refresh_sec": settings.ui_auto_refresh_sec,
     }
 
 
