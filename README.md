@@ -127,13 +127,15 @@ docker compose up -d
 ---
 
 ### Changelog (latest)
-- Added RU/EN interface with automatic language detection and in-app switcher.
-- Background refresh of variables every 5 seconds; removed legacy UI auto-refresh settings.
-- Redesigned sidebar for faster navigation and project/group browsing.
-- Dropped unused `/api/ui-config` endpoint and related client code.
+- Unified the overall visual style of the app: consistent typography, rounded surfaces, gradients, and shadows.
+- Refreshed the settings modal with a custom language dropdown that matches the app styling.
+- Anchored environment and type pickers so dropdown menus open neatly under their controls.
+- Added a dedicated delete action in the variables table for quicker cleanup.
+- Trimmed sidebar breadcrumbs with smart ellipsis and made modals close when clicking outside.
 
 ### Изменения (последнее)
-- Добавлен RU/EN интерфейс с автоопределением языка браузера и переключателем внутри приложения.
-- Фоновое обновление переменных каждые 5 секунд; устаревшие настройки автообновления удалены.
-- Сильно переработан сайдбар для ускорения навигации по группам и проектам.
-- Убран неиспользуемый эндпоинт `/api/ui-config` и связанный клиентский код.
+- Привели визуальный стиль всего интерфейса к единому виду: типографика, скругления, градиенты и тени.
+- Обновили окно настроек: кастомный переключатель языка теперь оформлен в едином стиле приложения.
+- Зафиксировали раскрывающиеся списки окружений и типов переменных под контролами, без смещений.
+- Добавили отдельную кнопку удаления переменных для быстрого наведения порядка.
+- Сократили цепочку хлебных крошек через сокращение с многоточием и сделали модалки закрываемыми по клику вне окна.

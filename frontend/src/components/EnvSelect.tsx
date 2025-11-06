@@ -41,26 +41,6 @@ export function EnvSelect({
 
   useOutsideClose([anchorRef, popRef], () => setOpen(false));
 
-  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 260 });
-  useEffect(() => {
-    function place() {
-      const a = anchorRef.current;
-      if (!a) return;
-      const r = a.getBoundingClientRect();
-      // Используем fixed-позиционирование, поэтому координаты берём из viewport без scroll offsets
-      let width = Math.min(r.width, Math.max(220, window.innerWidth - 24));
-      let left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
-      setPos({ top: r.bottom + 6, left, width });
-    }
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [open]);
-
   useEffect(() => {
     if (open) setQ("");
   }, [open]);
@@ -73,26 +53,24 @@ export function EnvSelect({
   const display = value === '*' ? t('modal.env.all') : value;
 
   return (
-    <>
-      <div ref={anchorRef} className="relative">
-        <input
-          readOnly
-          value={display}
-          onClick={() => setOpen(true)}
-          className="w-[220px] gl-input h-9 leading-9 pr-9 cursor-pointer"
-          placeholder={t('modal.env.all')}
-          title={t('modal.env.selectTitle')}
-        />
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden>
-          <ChevronDown size={16} strokeWidth={2.5} />
-        </span>
-      </div>
+    <div ref={anchorRef} className="relative">
+      <input
+        readOnly
+        value={display}
+        onClick={() => setOpen(true)}
+        className="w-[220px] gl-input h-9 leading-9 pr-9 cursor-pointer"
+        placeholder={t('modal.env.all')}
+        title={t('modal.env.selectTitle')}
+      />
+      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600" aria-hidden>
+        <ChevronDown size={16} strokeWidth={2.5} />
+      </span>
 
       {open && (
         <div
           ref={popRef}
-          className="fixed z-50"
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
+          className="absolute z-50 mt-1 left-0 right-0"
+          style={{ top: "100%" }}
         >
           <div className="rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
             <div className="p-2 border-b border-slate-200">
@@ -136,6 +114,6 @@ export function EnvSelect({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

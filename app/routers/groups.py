@@ -145,3 +145,21 @@ async def group_variable_upsert(request: Request, group_id: int, payload: Upsert
     except Exception:
         logger.exception("upsert group variable: failed group_id=%s %s", group_id, safe)
         raise
+
+
+@router.delete("/{group_id}/variables/{key}")
+async def group_variable_delete(
+    request: Request,
+    group_id: int,
+    key: str,
+    environment_scope: str = Query(default="*"),
+) -> Dict[str, Any]:
+    gl = request.app.state.gitlab
+    logger.info("delete group variable: group_id=%s key=%s env=%s", group_id, key, environment_scope)
+    try:
+        await gl._group_var_delete(group_id, key, environment_scope)
+        logger.info("delete group variable: done group_id=%s key=%s env=%s", group_id, key, environment_scope)
+        return {"status": "deleted", "key": key, "environment_scope": environment_scope}
+    except Exception as e:
+        logger.exception("delete group variable: failed group_id=%s key=%s env=%s", group_id, key, environment_scope)
+        raise

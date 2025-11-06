@@ -753,6 +753,9 @@ export function Sidebar(props: SidebarProps) {
     [],
   );
 
+  const showEllipsis = groupPath.length > 2;
+  const visibleTrail = showEllipsis ? groupPath.slice(-2) : groupPath;
+
   const breadcrumbs = groupPath.length === 0 ? null : (
     <nav className="flex items-center gap-1 text-xs sm:text-sm whitespace-nowrap overflow-hidden">
       <button
@@ -772,16 +775,24 @@ export function Sidebar(props: SidebarProps) {
           } catch {}
         }}
         className={cls(
-          "px-2 py-1 rounded-full transition",
-          !groupPath.length ? "bg-slate-200 text-slate-800" : "text-slate-600 hover:bg-slate-100",
+          "px-3 py-1.5 rounded-lg transition-all duration-200 font-medium",
+          !groupPath.length 
+            ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+            : "text-slate-700 hover:bg-gradient-to-r hover:from-slate-100 hover:to-blue-50/50 hover:shadow-sm"
         )}
         aria-label={t('sidebar.root.back')}
         title={t('sidebar.root.back')}
       >
         {t('sidebar.root.label')}
       </button>
-      {groupPath.map((entry, idx) => {
-        const isLast = idx === groupPath.length - 1;
+      {showEllipsis && (
+        <>
+          <ChevronRight size={14} className="text-slate-400" />
+          <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 font-medium">…</span>
+        </>
+      )}
+      {visibleTrail.map((entry, idx) => {
+        const isLast = idx === visibleTrail.length - 1;
         return (
           <React.Fragment key={entry.id}>
             <ChevronRight size={14} className="text-slate-400" />
@@ -789,8 +800,10 @@ export function Sidebar(props: SidebarProps) {
               type="button"
               onClick={() => handleGroupClick(entry)}
               className={cls(
-                "px-2 py-1 rounded-full transition truncate max-w-[160px]",
-                isLast ? "bg-slate-200 text-slate-800" : "text-slate-600 hover:bg-slate-100",
+                "px-3 py-1.5 rounded-lg transition-all duration-200 truncate max-w-[160px] font-medium",
+                isLast 
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  : "text-slate-700 hover:bg-gradient-to-r hover:from-slate-100 hover:to-blue-50/50 hover:shadow-sm"
               )}
               title={entry.full_path}
             >
@@ -821,15 +834,15 @@ export function Sidebar(props: SidebarProps) {
       ref={scrollRef}
       className="w-[420px] shrink-0 p-3 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden"
     >
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="p-3 border-b border-slate-200 space-y-3">
-          <div className="text-xs text-slate-500 uppercase tracking-wide">{t('sidebar.navigation')}</div>
+      <div className="rounded-3xl border border-slate-300/70 bg-white shadow-lg shadow-slate-300/25 overflow-hidden backdrop-blur-sm">
+        <div className="p-4 border-b border-slate-300/60 space-y-3 bg-gradient-to-r from-slate-50 to-white">
+          <div className="text-xs text-slate-600 uppercase tracking-wider font-semibold">{t('sidebar.navigation')}</div>
           <div className="relative">
             <input
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
               placeholder={t('sidebar.search.placeholder')}
-              className="w-full gl-input text-sm pl-9"
+              className="w-full gl-input text-sm pl-9 rounded-xl border-slate-200/60 focus:border-blue-300 focus:ring-2 focus:ring-blue-100 transition-all"
             />
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
@@ -848,14 +861,14 @@ export function Sidebar(props: SidebarProps) {
                 type="button"
                 onClick={() => handleGroupClick(currentGroup)}
                 className={cls(
-                  "w-full text-left px-3 py-2 rounded-xl border border-transparent transition flex items-center gap-2 focus:outline-none",
-                  "hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm",
-                  !projectSelected && "border border-blue-200 bg-white text-slate-900 shadow-md ring-1 ring-blue-200",
-                  projectSelected && "border border-transparent bg-slate-50 text-slate-700",
+                  "w-full text-left px-3 py-2.5 rounded-xl border transition-all duration-200 flex items-center gap-2 focus:outline-none",
+                  "hover:border-blue-200/60 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/30 hover:shadow-md",
+                  !projectSelected && "border-blue-200/60 bg-gradient-to-r from-blue-50 to-indigo-50/50 text-slate-900 shadow-lg ring-2 ring-blue-100",
+                  projectSelected && "border-slate-200/60 bg-slate-50/50 text-slate-700",
                 )}
                 title={currentGroup.full_path}
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-100 text-blue-600">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                     <path d="M2.5 3.5h4l1 1H13a.5.5 0 01.5.5v6.5a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5V4a.5.5 0 01.5-.5z" />
                   </svg>
@@ -898,13 +911,14 @@ export function Sidebar(props: SidebarProps) {
                             title={item.group.full_path}
                             onClick={() => handleGroupClick(item.group)}
                             className={cls(
-                              "w-full text-left px-3 py-2 rounded-xl border border-transparent transition flex items-center gap-2",
-                              "hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm",
-                              isActive && "border border-blue-200 bg-white text-slate-900 shadow-md ring-1 ring-blue-200",
+                              "w-full text-left px-3 py-2 rounded-xl border transition-all duration-200 flex items-center gap-2",
+                              isActive 
+                                ? "bg-gradient-to-r from-blue-50 to-indigo-50/50 border-blue-200/60 text-slate-900 shadow-lg ring-2 ring-blue-100" 
+                                : "border-transparent hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50/30 hover:border-slate-200/40 hover:shadow-md"
                             )}
                           >
                             <span
-                              className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-100 text-slate-500"
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-slate-400 to-slate-600 text-white shadow-md"
                               style={{ marginLeft: indent }}
                             >
                               <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -912,8 +926,8 @@ export function Sidebar(props: SidebarProps) {
                               </svg>
                             </span>
                             <div className={cls(
-                              "truncate text-slate-700",
-                              isActive ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium",
+                              "truncate",
+                              isActive ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium text-slate-700",
                             )}
                             >
                               {item.group.name || pathSegment(item.group.full_path)}
@@ -941,10 +955,10 @@ export function Sidebar(props: SidebarProps) {
                           key={project.id}
                           type="button"
                           onClick={() => handleProjectClick(project)}
-                          className="w-full text-left px-3 py-2 rounded-xl border border-transparent transition flex items-center gap-2 hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm"
+                          className="w-full text-left px-3 py-2 rounded-xl border border-transparent transition-all duration-200 flex items-center gap-2 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50/30 hover:border-slate-200/40 hover:shadow-md"
                           title={project.path_with_namespace || project.name}
                         >
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-100 text-blue-600">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
                             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                               <path d="M3 2.5h10a.5.5 0 01.5.5v10l-3-2-3 2-3-2-3 2V3a.5.5 0 01.5-.5z" />
                             </svg>
@@ -986,24 +1000,20 @@ export function Sidebar(props: SidebarProps) {
                           title={group.full_path}
                           onClick={() => handleGroupClick(group)}
                           className={cls(
-                            "w-full text-left px-3 py-2 rounded-xl border border-transparent transition flex items-center gap-2",
-                            "hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm",
-                            isActive && "border border-blue-200 bg-white text-slate-900 shadow-md ring-1 ring-blue-200",
+                            "w-full text-left px-3 py-2 rounded-xl border transition-all duration-200 flex items-center gap-2",
+                            isActive 
+                              ? "bg-gradient-to-r from-blue-50 to-indigo-50/50 border-blue-200/60 text-slate-900 shadow-lg ring-2 ring-blue-100" 
+                              : "border-transparent hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50/30 hover:border-slate-200/40 hover:shadow-md"
                           )}
                         >
-                          <span
-                            className={cls(
-                              "inline-flex items-center justify-center w-5 h-5 rounded-md",
-                              isActive ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500",
-                            )}
-                          >
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
                             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                               <path d="M2.5 3.5h4l1 1H13a.5.5 0 01.5.5v6.5a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5V4a.5.5 0 01.5-.5z" />
                             </svg>
                           </span>
                           <div className={cls(
-                            "truncate text-slate-700",
-                            isActive ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium",
+                            "truncate",
+                            isActive ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium text-slate-700",
                           )}
                           >
                             {group.name || pathSegment(group.full_path)}
@@ -1019,18 +1029,18 @@ export function Sidebar(props: SidebarProps) {
                       <button
                         type="button"
                         onClick={() => handleShowMoreGroups(activeGroupId ?? null)}
-                        className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                        className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200/60 bg-gradient-to-r from-white to-slate-50 text-slate-700 hover:from-slate-50 hover:to-blue-50/30 hover:shadow-md transition-all duration-200"
                       >
-                        {t('sidebar.load.more')}
+                        <span className="text-sm font-medium">{t('sidebar.load.more')}</span>
                       </button>
                     )}
                     {canCollapseGroups && (
                       <button
                         type="button"
                         onClick={() => handleCollapseGroups(activeGroupId ?? null)}
-                        className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                        className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200/60 bg-gradient-to-r from-white to-slate-50 text-slate-700 hover:from-slate-50 hover:to-blue-50/30 hover:shadow-md transition-all duration-200"
                       >
-                        {t('sidebar.collapse')}
+                        <span className="text-sm font-medium">{t('sidebar.collapse')}</span>
                       </button>
                     )}
                   </div>
@@ -1040,8 +1050,8 @@ export function Sidebar(props: SidebarProps) {
           </div>
           {typeof activeGroupId === "number" && (
             <div>
-              <div className="border-t border-slate-200 pt-3 mt-3">
-                <div className="text-[11px] font-semibold uppercase text-blue-500 px-2 mb-1 tracking-wide flex items-center gap-1">
+              <div className="border-t border-slate-300/60 pt-3 mt-3">
+                <div className="text-[11px] font-semibold uppercase text-slate-600 px-2 mb-1 tracking-wide flex items-center gap-1">
                   <span>{t('sidebar.projects')}</span>
                 </div>
               </div>
@@ -1061,20 +1071,21 @@ export function Sidebar(props: SidebarProps) {
                         type="button"
                         onClick={() => handleProjectClick(project)}
                         className={cls(
-                          "w-full text-left px-3 py-2 rounded-xl border border-transparent transition flex items-center gap-2",
-                          "hover:border-blue-200 hover:bg-blue-50/60 hover:shadow-sm",
-                          isSelected && "border border-blue-200 bg-white text-slate-900 shadow-md ring-1 ring-blue-200",
+                          "w-full text-left px-3 py-2 rounded-xl border transition-all duration-200 flex items-center gap-2",
+                          isSelected 
+                            ? "bg-gradient-to-r from-blue-50 to-indigo-50/50 border-blue-200/60 text-slate-900 shadow-lg ring-2 ring-blue-100" 
+                            : "border-transparent hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50/30 hover:border-slate-200/40 hover:shadow-md"
                         )}
                         title={project.path_with_namespace || project.name}
                       >
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-100 text-blue-600">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md">
                           <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                             <path d="M3 2.5h10a.5.5 0 01.5.5v10l-3-2-3 2-3-2-3 2V3a.5.5 0 01.5-.5z" />
                           </svg>
                         </span>
                         <div className={cls(
-                          "truncate text-slate-700",
-                          isSelected ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium",
+                          "truncate",
+                          isSelected ? "text-[15px] font-semibold text-slate-900" : "text-sm font-medium text-slate-700",
                         )}
                         >
                           {project.name}
@@ -1091,10 +1102,10 @@ export function Sidebar(props: SidebarProps) {
                       type="button"
                       onClick={handleLoadMoreProjects}
                       disabled={projectsLoading}
-                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition disabled:opacity-60"
+                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200/60 bg-gradient-to-r from-white to-slate-50 text-slate-700 hover:from-slate-50 hover:to-blue-50/30 hover:shadow-md transition-all duration-200 disabled:opacity-60"
                     >
                       {projectsLoading ? <Loader2 size={16} className="animate-spin" /> : null}
-                      <span>{t('sidebar.load.more')}</span>
+                      <span className="text-sm font-medium">{t('sidebar.load.more')}</span>
                     </button>
                   )}
                   {projectsState && currentProjects.length > (projectsState.firstPageItems?.length ?? PROJECTS_PAGE_SIZE) && (
@@ -1102,9 +1113,9 @@ export function Sidebar(props: SidebarProps) {
                       type="button"
                       onClick={handleCollapseProjects}
                       disabled={projectsLoading}
-                      className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition disabled:opacity-60"
+                      className="w-full inline-flex items-center justify-center px-3 py-2 rounded-xl border border-slate-200/60 bg-gradient-to-r from-white to-slate-50 text-slate-700 hover:from-slate-50 hover:to-blue-50/30 hover:shadow-md transition-all duration-200 disabled:opacity-60"
                     >
-                      {t('sidebar.collapse')}
+                      <span className="text-sm font-medium">{t('sidebar.collapse')}</span>
                     </button>
                   )}
                 </div>

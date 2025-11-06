@@ -67,3 +67,9 @@ export type VarEditing = VarDetail & { __originalKey?: string; __originalEnv?: s
 
 export type Health = { ok: boolean; user?: { id: number; username?: string; name?: string }; base_url?: string };
 export type ApiError = { status: number; message?: string; json?: any };
+
+export type DeleteVarResponse = {
+  status: 'deleted';
+  key: string;
+  environment_scope: string;
+};
