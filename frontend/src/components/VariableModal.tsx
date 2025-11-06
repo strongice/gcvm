@@ -61,22 +61,22 @@ export function VariableModal(props: {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
-        <div className={"w-[96vw] h-[90vh] sm:w-[95vw] sm:h-[85vh] max-w-[100vw] max-h-[100vh] min-w-[320px] min-h-[260px] resize overflow-hidden flex flex-col bg-white border border-slate-200 rounded-2xl shadow-2xl relative"}>
+        <div className={"w-[96vw] h-[90vh] sm:w-[95vw] sm:h-[85vh] max-w-[100vw] max-h-[100vh] min-w-[320px] min-h-[260px] resize overflow-hidden flex flex-col bg-white border border-slate-300/70 rounded-3xl shadow-xl shadow-slate-300/25 relative backdrop-blur-sm"}>
           {/* Close button in top-right corner */}
           <button
-            className="absolute top-3 right-3 inline-flex items-center justify-center w-8 h-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
+            className="absolute top-4 right-4 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-r from-slate-50 to-white border border-slate-300/60 hover:from-slate-100 hover:to-slate-50 hover:shadow-md transition-all duration-200"
             onClick={onClose}
             disabled={saving}
             aria-label={t('modal.close')}
             title={t('modal.close')}
           >
-            <X size={16} />
+            <X size={18} className="text-slate-600" />
           </button>
           {/* header */}
-          <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between pr-14">
-            <div className="text-lg font-semibold">
+          <div className="px-6 py-4 border-b border-slate-300/60 flex items-center justify-between pr-16 bg-gradient-to-r from-blue-50 via-indigo-50/30 to-purple-50/20">
+            <div className="text-xl font-bold text-slate-800 tracking-tight">
               {isEditing
                 ? `${t('modal.variable.edit')}: ${draft.key || (initial as any)?.__originalKey || ''}`
                 : `${t('modal.variable.create')}: ${draft.key || ''}`}
@@ -84,7 +84,7 @@ export function VariableModal(props: {
           </div>
 
           {error && (
-            <div className="px-5 py-2 bg-rose-50 text-rose-700 border-b border-rose-200 text-sm">
+            <div className="px-6 py-3 bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border-b border-red-200/60 text-sm font-medium shadow-sm">
               {error}
             </div>
           )}
@@ -95,7 +95,7 @@ export function VariableModal(props: {
               {/* Строка: Ключ, Окружение, Тип */}
               <div className="flex flex-wrap items-center gap-3">
                 <label className="inline-flex items-center gap-2 flex-1 min-w-[240px] max-w-[520px]">
-                  <span className="text-slate-600">{t('modal.field.key')}</span>
+                  <span className="text-sm font-semibold text-slate-700">{t('modal.field.key')}</span>
                   <input
                     value={draft.key}
                     onChange={(e) => setDraft({ ...draft, key: e.target.value })}
@@ -105,7 +105,7 @@ export function VariableModal(props: {
                 </label>
 
                 <div className="inline-flex items-center gap-2">
-                  <span className="text-slate-600">{t('modal.field.environment')}</span>
+                  <span className="text-sm font-semibold text-slate-700">{t('modal.field.environment')}</span>
                   <EnvSelect
                     value={draft.environment_scope}
                     options={envOptions}
@@ -116,7 +116,7 @@ export function VariableModal(props: {
                 </div>
 
                 <label className="inline-flex items-center gap-2">
-                  <span className="text-slate-600">{t('modal.field.type')}</span>
+                  <span className="text-sm font-semibold text-slate-700">{t('modal.field.type')}</span>
                   <TypeSelect
                     value={(draft.variable_type === 'env_var' ? 'variables' : (draft.variable_type as any)) || 'file'}
                     onChange={(v) => setDraft({ ...draft, variable_type: v })}
@@ -128,7 +128,7 @@ export function VariableModal(props: {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 {/* Visibility */}
                 <div>
-                  <div className="text-slate-600 mb-2">{t('modal.field.visibility')}</div>
+                  <div className="text-sm font-semibold text-slate-700 mb-3">{t('modal.field.visibility')}</div>
                   <div className="space-y-2">
                     <label className="block">
                       <span className="inline-flex items-center gap-2">
@@ -179,7 +179,7 @@ export function VariableModal(props: {
 
                 {/* Flags */}
                 <div>
-                  <div className="inline-flex items-center gap-1 text-slate-600 mb-2">
+                  <div className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700 mb-3">
                     <span>{t('modal.field.flags')}</span>
                   </div>
                   <div className="space-y-2">
@@ -214,12 +214,12 @@ export function VariableModal(props: {
 
               {/* Value */}
               <div className="space-y-2 flex-1 min-h-0 flex flex-col">
-                <div className="text-sm text-slate-600">{t('modal.field.value')}</div>
+                <div className="text-sm font-semibold text-slate-700">{t('modal.field.value')}</div>
                 <textarea
                   ref={textRef}
                   value={draft.value ?? ""}
                   onChange={(e) => setDraft({ ...draft, value: e.target.value })}
-                  className="flex-1 min-h-[200px] w-full max-w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-300/60 overflow-auto resize-y"
+                  className="flex-1 min-h-[200px] w-full max-w-full rounded-2xl border border-slate-300/70 bg-white px-4 py-3 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 overflow-auto resize-y shadow-sm transition-all duration-200"
                   style={{ WebkitOverflowScrolling: 'touch' as any }}
                   placeholder={t('modal.placeholder.value')}
                 />
@@ -236,10 +236,10 @@ export function VariableModal(props: {
           </div>
 
           {/* footer */}
-          <div className="px-5 py-3 border-t border-slate-200 bg-slate-50">
-            <div className="flex gap-2 justify-end">
+          <div className="px-6 py-4 border-t border-slate-300/60 bg-gradient-to-r from-slate-50/50 to-slate-100/30">
+            <div className="flex gap-3 justify-end">
               <button
-                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
+                className="px-5 py-2.5 rounded-xl border border-slate-300/60 bg-gradient-to-r from-white to-slate-50 hover:from-slate-50 hover:to-slate-100 text-slate-700 font-medium shadow-sm hover:shadow-md transition-all duration-200"
                 onClick={onClose}
                 disabled={saving}
                 title={t('modal.actions.cancelTitle')}
@@ -247,7 +247,7 @@ export function VariableModal(props: {
                 {t('action.cancel')}
               </button>
               <button
-                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-60"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-0.5 disabled:transform-none"
                 onClick={async () => {
                   setSaving(true);
                   try {

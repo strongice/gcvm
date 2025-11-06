@@ -114,3 +114,21 @@ async def project_variable_upsert(request: Request, project_id: int, payload: Up
     except Exception as e:
         logger.exception("upsert project variable: failed project_id=%s %s", project_id, safe)
         raise
+
+
+@router.delete("/{project_id}/variables/{key}")
+async def project_variable_delete(
+    request: Request,
+    project_id: int,
+    key: str,
+    environment_scope: str = Query(default="*"),
+) -> Dict[str, Any]:
+    gl = request.app.state.gitlab
+    logger.info("delete project variable: project_id=%s key=%s env=%s", project_id, key, environment_scope)
+    try:
+        await gl._project_var_delete(project_id, key, environment_scope)
+        logger.info("delete project variable: done project_id=%s key=%s env=%s", project_id, key, environment_scope)
+        return {"status": "deleted", "key": key, "environment_scope": environment_scope}
+    except Exception as e:
+        logger.exception("delete project variable: failed project_id=%s key=%s env=%s", project_id, key, environment_scope)
+        raise

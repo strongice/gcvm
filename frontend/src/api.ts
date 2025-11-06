@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  DeleteVarResponse,
   GroupPageResponse,
   GroupTreeNode,
   GroupTreeResponse,
@@ -125,6 +126,16 @@ export const api = {
       body: JSON.stringify(payload),
     });
     return check<any>(r);
+  },
+  async varDelete(ctx: { kind: "project" | "group"; id: number }, key: string, env: string) {
+    const url =
+      ctx.kind === "project"
+        ? `/api/projects/${ctx.id}/variables/${encodeURIComponent(key)}?environment_scope=${encodeURIComponent(env)}`
+        : `/api/groups/${ctx.id}/variables/${encodeURIComponent(key)}?environment_scope=${encodeURIComponent(env)}`;
+    const r = await fetchNoStore(url, {
+      method: "DELETE",
+    });
+    return check<DeleteVarResponse>(r);
   },
   async projectGet(project_id: number) {
     const r = await fetchNoStore(`/api/projects/${project_id}`);
